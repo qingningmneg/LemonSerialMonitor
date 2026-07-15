@@ -13,7 +13,8 @@
 - 串口设备随后出现时，不需要重启服务或计算机；下一次状态检查或捕获操作须重新尝试驱动初始化。
 - 无法确认内核捕获状态时不得开始新的捕获，不得把未知状态当成已停止。
 - 界面的 Start、Pause、Resume、Stop 必须经过 `CaptureAuthority`，不得绕过启动协调、捕获所有权和 AI 租约冲突检查。
-- 仅 `DRIVER_UNAVAILABLE` 可降级继续启动；取消、存储损坏、配置错误和其他异常必须继续阻止服务启动。
+- 仅明确的控制设备不存在可降级继续启动；取消、协议不兼容、权限/绑定、配置和其他异常必须继续阻止服务启动。
+- 单个历史会话损坏沿用现有隔离策略并跳过，不把一份旧会话损坏扩大为整个服务不可用；服务存储边界或配置本身失败仍须阻止启动。
 
 ## 方案比较
 
@@ -45,12 +46,17 @@
    - Start、Pause、Resume、Stop 统一经过 Authority 的串行转换门；
    - ListPorts、Subscribe、Clear 和 Export 保持各自现有只读或已受协调器状态约束的路径；
    - AI 捕获存在时，WPF Pause/Resume 不得改变 AI 所有的捕获。
+8. 驱动异常在产生处分类：
+   - 打开控制设备返回 Win32 `ERROR_FILE_NOT_FOUND` (2) 或 `ERROR_PATH_NOT_FOUND` (3) 时，映射为 `DRIVER_UNAVAILABLE`；
+   - `ERROR_ACCESS_DENIED`、句柄绑定失败、协议不兼容、普通异常和所有 `OperationCanceledException` 保留原类别并阻止宿主启动；
+   - 启动状态只允许 `Ready`、`DevelopmentFake` 和 `DriverUnavailable` 继续，`ProtocolMismatch`、`Faulted` 或未知枚举值必须失败。
 
 ## 错误与日志
 
 - 降级日志必须包含驱动暂不可用的原因，并说明服务会保持运行等待设备。
 - 不吞掉 `OperationCanceledException`。
 - 不吞掉非 `DRIVER_UNAVAILABLE` 的 `CaptureLeaseException` 或普通异常。
+- 不通过错误消息文本或本地化文字判断异常类别。
 - 不改变驱动服务启动类型、PnP 绑定、3010 重启和安装/卸载事务。
 
 ## 测试与验收
@@ -60,8 +66,12 @@
 - 启动协调遇到 `DRIVER_UNAVAILABLE` 时完成而不抛出，宿主可继续启动。
 - 第一次驱动不可用后，状态源变为可用，再次执行核心协调能够成功，证明恢复无需重启。
 - 取消或非预期异常仍向上传播。
+- 驱动端点不存在可降级；访问拒绝、绑定失败、协议不兼容和普通统计异常不可降级。
+- 启动状态门只允许 `Ready`、`DevelopmentFake`、`DriverUnavailable`，明确拒绝 `ProtocolMismatch`、`Faulted` 和未知枚举值。
 - 管道收到 Start、Pause、Resume、Stop 时逐项调用 WPF Authority 接口，而不是直接调用 `CaptureCoordinator`。
 - WPF Pause/Resume 仅能改变 WPF 所有的运行；AI 所有或未知所有权必须被拒绝。
+- 使用同一 Source、Coordinator、Authority 和 PipeServer 的生产组合测试覆盖：未知驱动状态拒绝 Start、驱动恢复后的 Start/Pause/Resume/Stop、AI 所有权冲突。
+- 确定性并发测试证明 WPF 与 AI 状态竞争只有一个有效胜者，且不会挂起或留下不一致 owner/state/lease。
 - 运行全部服务测试、全部托管测试和安装器契约测试。
 
 真实系统验收：

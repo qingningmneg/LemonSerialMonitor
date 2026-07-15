@@ -15,6 +15,7 @@
 - 未知驱动状态不得被视为已停止，不得在无法协调内核状态时开始捕获。
 - WPF 的 Start、Pause、Resume、Stop 必须经过 `CaptureAuthority`；不得直接从管道调用 `CaptureCoordinator` 的同名状态变更。
 - 只容忍错误码为 `DRIVER_UNAVAILABLE` 的启动异常；取消和其他异常必须继续向上传播。
+- 只有 Win32 `ERROR_FILE_NOT_FOUND` (2) 与 `ERROR_PATH_NOT_FOUND` (3) 可产生可降级的“控制设备不存在”；访问拒绝、绑定、协议、普通异常和所有取消必须保留为致命类别。
 - 不增加轮询器、定时器、设备通知服务或协议变更。
 - 不修改安装/卸载事务、驱动启动类型、PnP 绑定或测试证书逻辑。
 - 不修改 `docs/superpowers/plans/2026-07-13-commmonitor-complete-manual.md`。
@@ -448,3 +449,260 @@ git commit -m "fix: 统一界面捕获状态控制"
 - [ ] **Step 10: 独立审查与真实系统复测**
 
 使用 Task 1 提交作为基线生成审查包，由新的审查者确认所有四个状态变更都经过 WPF Authority，且 ListPorts、Clear、Export、Subscribe 协议未改变。审查通过后重建并安装候选包；在没有串口设备时重启，确认服务 Running、AI `ping` 和 MCP smoke 可用，且自本次启动后没有该服务的新 SCM 7009/7000。若随后连接串口设备，再验证端口枚举和捕获启动无需重启。
+
+---
+
+### Task 3: 收紧异常分类并补生产组合验收
+
+**Files:**
+- Modify: `src/CommMonitor.Service/Driver/NativeMethods.cs`
+- Modify: `src/CommMonitor.Service/Driver/WindowsDriverDevice.cs`
+- Modify: `src/CommMonitor.Service/Capture/CaptureAuthority.cs`
+- Modify: `src/CommMonitor.Service/Hosting/CaptureServiceStartup.cs`
+- Modify: `src/CommMonitor.Service/Program.cs`
+- Modify: `tests/CommMonitor.Service.Tests/Driver/WindowsDriverDeviceTests.cs`
+- Modify: `tests/CommMonitor.Service.Tests/Capture/CaptureLeaseManagerTests.cs`
+- Modify: `tests/CommMonitor.Service.Tests/Hosting/CaptureServiceStartupTests.cs`
+- Modify: `tests/CommMonitor.Service.Tests/Ipc/PipeServerTests.cs`
+
+**Interfaces:**
+- Consumes: `WindowsDriverDeviceFactory.OpenAsync`、`CaptureAuthority.InitializeAsync`、`CaptureSourceStatus`、`CaptureServiceStartup.InitializeAsync`、真实 `PipeServer` 构造链。
+- Produces: `CaptureServiceStartup.EnsureSourceStatusAllowsStartup(CaptureSourceStatus, ILogger)`；只有设备端点确实不存在时可降级，生产组合由自动化测试覆盖。
+
+- [ ] **Step 1: 写 Win32 打开与绑定分类失败测试**
+
+在 `WindowsDriverDeviceTests.cs` 增加：
+
+```csharp
+[Theory]
+[InlineData(NativeMethods.ErrorFileNotFound)]
+[InlineData(NativeMethods.ErrorPathNotFound)]
+public async Task Factory_maps_only_missing_control_device_errors_to_unavailable(int errorCode)
+{
+    var api = new FakeWindowsDriverApi
+    {
+        OpenResult = new DriverHandleOpenResult(
+            new SafeFileHandle(new IntPtr(-1), ownsHandle: false),
+            errorCode),
+    };
+    var factory = new WindowsDriverDeviceFactory(
+        api,
+        new FakeOverlappedBindingFactory(new FakeOverlappedBinding()));
+
+    await Assert.ThrowsAsync<DriverUnavailableException>(
+        () => factory.OpenAsync(CancellationToken.None).AsTask());
+}
+
+[Fact]
+public async Task Factory_preserves_access_denied_as_a_fatal_win32_error()
+{
+    var api = new FakeWindowsDriverApi
+    {
+        OpenResult = new DriverHandleOpenResult(
+            new SafeFileHandle(new IntPtr(-1), ownsHandle: false),
+            NativeMethods.ErrorAccessDenied),
+    };
+    var factory = new WindowsDriverDeviceFactory(
+        api,
+        new FakeOverlappedBindingFactory(new FakeOverlappedBinding()));
+
+    Win32Exception error = await Assert.ThrowsAsync<Win32Exception>(
+        () => factory.OpenAsync(CancellationToken.None).AsTask());
+    Assert.Equal(NativeMethods.ErrorAccessDenied, error.NativeErrorCode);
+}
+```
+
+另加一个抛 `IOException("binding failed")` 的 `IOverlappedBindingFactory`，断言 `OpenAsync` 抛 `InvalidOperationException` 且 InnerException 保留原异常。
+
+- [ ] **Step 2: 运行工厂分类测试并确认 RED**
+
+Run:
+
+```powershell
+& artifacts\toolchain\dotnet-10.0.301-x64\dotnet.exe test `
+  tests\CommMonitor.Service.Tests\CommMonitor.Service.Tests.csproj `
+  --filter "FullyQualifiedName~Factory_maps_only_missing_control_device_errors_to_unavailable|FullyQualifiedName~Factory_preserves_access_denied_as_a_fatal_win32_error|FullyQualifiedName~Factory_preserves_binding_failure_as_fatal" `
+  --no-restore
+```
+
+Expected: FAIL；`ErrorPathNotFound` 尚不存在，访问拒绝和绑定失败仍被映射为 `DriverUnavailableException`。
+
+- [ ] **Step 3: 最小实现 Win32 与绑定分类**
+
+在 `NativeMethods.cs` 增加：
+
+```csharp
+internal const int ErrorPathNotFound = 3;
+```
+
+在 `WindowsDriverDeviceFactory.OpenAsync` 中只对错误 2/3 抛 `DriverUnavailableException`，其他无效句柄错误抛原生 `Win32Exception`：
+
+```csharp
+if (handle.IsInvalid)
+{
+    handle.Dispose();
+    var nativeError = new Win32Exception(openResult.ErrorCode);
+    if (openResult.ErrorCode is NativeMethods.ErrorFileNotFound or
+        NativeMethods.ErrorPathNotFound)
+    {
+        throw new DriverUnavailableException(
+            $"Cannot open the Lemon serial monitor driver control device '{DevicePath}': " +
+            nativeError.Message,
+            nativeError);
+    }
+
+    throw nativeError;
+}
+```
+
+绑定失败释放句柄后抛 `InvalidOperationException`，不得再包装为 `DriverUnavailableException`。
+
+- [ ] **Step 4: 运行工厂分类测试并确认 GREEN**
+
+重复 Step 2 命令。
+
+Expected: 全部通过，失败数 0。
+
+- [ ] **Step 5: 写真实 Authority 到宿主的异常分类失败测试**
+
+在 `CaptureLeaseManagerTests.cs` 增加一个可脚本化统计异常的 `ICaptureSource`/`ICaptureSourceStatisticsProvider`。通过真实 `CaptureAuthority` 方法传给 `CaptureServiceStartup.InitializeAsync`，分别断言：
+
+```csharp
+await CaptureServiceStartup.InitializeAsync(
+    unavailableAuthority.InitializeAsync,
+    NullLogger.Instance,
+    CancellationToken.None); // only DriverUnavailable completes
+
+await Assert.ThrowsAsync<InvalidDataException>(() =>
+    CaptureServiceStartup.InitializeAsync(
+        protocolAuthority.InitializeAsync,
+        NullLogger.Instance,
+        CancellationToken.None));
+
+await Assert.ThrowsAsync<InvalidOperationException>(() =>
+    CaptureServiceStartup.InitializeAsync(
+        faultAuthority.InitializeAsync,
+        NullLogger.Instance,
+        CancellationToken.None));
+
+await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+    CaptureServiceStartup.InitializeAsync(
+        cancellationAuthority.InitializeAsync,
+        NullLogger.Instance,
+        CancellationToken.None));
+```
+
+失败测试必须证明当前真实 Authority 会把后三种错误错误地降级吞掉。
+
+- [ ] **Step 6: 写启动状态 allow-list 失败测试**
+
+在 `CaptureServiceStartupTests.cs` 增加理论测试：`Ready`、`DevelopmentFake`、`DriverUnavailable` 不抛；`ProtocolMismatch`、`Faulted` 与强制转换的未知枚举值抛 `InvalidOperationException`。
+
+```csharp
+[Theory]
+[InlineData(CaptureSourceStatusKind.Ready)]
+[InlineData(CaptureSourceStatusKind.DevelopmentFake)]
+[InlineData(CaptureSourceStatusKind.DriverUnavailable)]
+public void Allowed_source_statuses_can_start_the_host(CaptureSourceStatusKind kind) =>
+    CaptureServiceStartup.EnsureSourceStatusAllowsStartup(
+        new CaptureSourceStatus(kind, "scripted"),
+        NullLogger.Instance);
+
+[Theory]
+[InlineData(CaptureSourceStatusKind.ProtocolMismatch)]
+[InlineData(CaptureSourceStatusKind.Faulted)]
+[InlineData((CaptureSourceStatusKind)999)]
+public void Fatal_source_statuses_abort_host_startup(CaptureSourceStatusKind kind) =>
+    Assert.Throws<InvalidOperationException>(() =>
+        CaptureServiceStartup.EnsureSourceStatusAllowsStartup(
+            new CaptureSourceStatus(kind, "scripted"),
+            NullLogger.Instance));
+```
+
+运行两个新增测试组并确认 RED：真实 Authority 的协议/普通异常/非关联取消未传播，状态 gate API 尚不存在。
+
+- [ ] **Step 7: 收紧 Authority 异常传播并实现状态 allow-list**
+
+在 `CaptureAuthority.ReadDriverStatisticsAsync` 中：
+
+- 所有 `OperationCanceledException` 无条件 `throw;`；
+- 仅 `DriverUnavailableException` 转为 `CaptureSourceStatistics.Unknown`；
+- `InvalidDataException`、Win32/访问、配置和普通异常不得捕获。
+
+孤儿停止分支只把 `DriverUnavailableException` 包装为结构化 `DRIVER_UNAVAILABLE`；所有取消和其他异常原样传播。已有统计提供者主动返回 `StatsKnown=false` 时仍保持未知状态安全门。
+
+在 `CaptureServiceStartup` 增加 `EnsureSourceStatusAllowsStartup`，按精确 allow-list 记录现有 Info/Warning；对 `ProtocolMismatch`、`Faulted` 和未知枚举值抛 `InvalidOperationException`。`Program.cs` 用它替换宽泛的 if/else 日志块。
+
+- [ ] **Step 8: 运行真实链与状态 gate 测试并确认 GREEN**
+
+Run:
+
+```powershell
+& artifacts\toolchain\dotnet-10.0.301-x64\dotnet.exe test `
+  tests\CommMonitor.Service.Tests\CommMonitor.Service.Tests.csproj `
+  --filter "FullyQualifiedName~Startup|FullyQualifiedName~source_statuses|FullyQualifiedName~Authority" `
+  --no-restore
+```
+
+Expected: 新增分类与 allow-list 测试全部通过，失败数 0。
+
+- [ ] **Step 9: 写真实生产组合与确定性并发特征测试**
+
+在 `PipeServerTests.cs` 使用同一个可恢复 Source、`CaptureCoordinator`、`CaptureAuthority`、存储边界和真实 `PipeServer` 构造生产组合。不得以 recording/pass-through controller 替代 Authority。测试至少断言：
+
+```csharp
+await CaptureServiceStartup.InitializeAsync(
+    authority.InitializeAsync,
+    NullLogger.Instance,
+    CancellationToken.None);
+
+PipeReply unavailableStart = await SendAsync(startCommand);
+Assert.False(unavailableStart.Success);
+Assert.Equal(CaptureState.Stopped, coordinator.State);
+Assert.False(File.Exists(sessionPath));
+
+source.MakeAvailable();
+Assert.True((await SendAsync(startCommand)).Success);
+Assert.True((await SendAsync(pauseCommand)).Success);
+Assert.True((await SendAsync(resumeCommand)).Success);
+Assert.True((await SendAsync(stopCommand)).Success);
+```
+
+同一组合中建立 AI owner 后，Pipe Pause/Resume 必须失败且 coordinator 状态不变。再以阻塞 source 确定性并发启动 WPF 与 AI：WPF 在 Authority gate 内阻塞时发起 AI Prepare，释放后只允许 WPF 成功，AI 返回 `CaptureConflict`，两个任务均在 5 秒内结束且最终 state/owner/lease 一致。
+
+这两项补的是整体审查发现的组合覆盖缺口，当前生产代码的门控实现已经存在，因此允许首次运行即 PASS。报告必须明确记录它们是特征/组合测试，不得把立即通过伪称为 TDD RED；测试必须使用真实 Authority、同一 Coordinator，并对未知状态拒绝、完整四步转换、AI 冲突和并发单一胜者作行为断言，不能只断言调用次数。
+
+- [ ] **Step 10: 完成实现并运行全量回归**
+
+完成组合测试所需的最小测试夹具，不增加生产轮询或协议。运行：
+
+```powershell
+& artifacts\toolchain\dotnet-10.0.301-x64\dotnet.exe test `
+  tests\CommMonitor.Service.Tests\CommMonitor.Service.Tests.csproj --no-restore
+& artifacts\toolchain\dotnet-10.0.301-x64\dotnet.exe test CommMonitor.sln --no-restore
+Import-Module Pester -MinimumVersion 4.10.1
+$result = Invoke-Pester -Script .\tests\powershell -PassThru
+if ($result.FailedCount -ne 0) { exit 1 }
+```
+
+Expected: Service、全量 managed、919 项 Pester 全部通过，失败数 0。
+
+- [ ] **Step 11: 自审、提交与复审**
+
+确认只修改 Task 3 九个文件，`git diff --check` 通过，保护文件 SHA256 保持 `06E9AB3B431DB17FB06C169150D890007B3F72D285EB230254BD4C494AEC0B6F`。提交：
+
+```powershell
+git add -- `
+  src/CommMonitor.Service/Driver/NativeMethods.cs `
+  src/CommMonitor.Service/Driver/WindowsDriverDevice.cs `
+  src/CommMonitor.Service/Capture/CaptureAuthority.cs `
+  src/CommMonitor.Service/Hosting/CaptureServiceStartup.cs `
+  src/CommMonitor.Service/Program.cs `
+  tests/CommMonitor.Service.Tests/Driver/WindowsDriverDeviceTests.cs `
+  tests/CommMonitor.Service.Tests/Capture/CaptureLeaseManagerTests.cs `
+  tests/CommMonitor.Service.Tests/Hosting/CaptureServiceStartupTests.cs `
+  tests/CommMonitor.Service.Tests/Ipc/PipeServerTests.cs
+git commit -m "fix: 仅降级真实设备缺失"
+```
+
+使用 `ad8eb9d` 为基线生成审查包，由新的审查者先复核两个 Important 与并发 Minor 已闭合，再重做 `f371b57..HEAD` 整体审查。审查 Ready 后才允许进入安装包重建和 Windows 实机验收。
