@@ -135,6 +135,24 @@ Describe 'Lemon graphical installer contract' {
         }
     }
 
+    It 'explains pending restart as Windows driver or device-stack cleanup' {
+        $text = Get-Content -Raw -LiteralPath $innoPath -Encoding UTF8
+        $accurateNotice = 'Windows ' + (ConvertFrom-TestCodePoints @(
+                0x6b63, 0x5728, 0x5b8c, 0x6210, 0x9a71, 0x52a8,
+                0x6216, 0x8bbe, 0x5907, 0x6808, 0x7684, 0x5b89,
+                0x5168, 0x6e05, 0x7406, 0x3002, 0x8bf7, 0x91cd,
+                0x65b0, 0x542f, 0x52a8, 0x8ba1, 0x7b97, 0x673a,
+                0xff0c, 0x5378, 0x8f7d, 0x4f1a, 0x81ea, 0x52a8,
+                0x7ee7, 0x7eed, 0x3002))
+        $misleadingNotice = ConvertFrom-TestCodePoints @(
+            0x90e8, 0x5206, 0x6587, 0x4ef6, 0x4ecd, 0x88ab,
+            0x0020, 0x0057, 0x0069, 0x006e, 0x0064, 0x006f,
+            0x0077, 0x0073, 0x0020, 0x5360, 0x7528)
+
+        $text.Contains($accurateNotice) | Should Be $true
+        $text.Contains($misleadingNotice) | Should Be $false
+    }
+
     It 'removes only empty protected installer directories after final uninstall' {
         $text = Get-Content -Raw -LiteralPath $innoPath -Encoding UTF8
         $expected = @(

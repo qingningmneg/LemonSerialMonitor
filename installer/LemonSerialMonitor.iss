@@ -590,7 +590,7 @@ begin
     if not ScheduleUninstallContinuation then
       RaiseException('卸载需要重启，但无法创建安全的重启续办任务。');
     if not UninstallSilent then
-      MsgBox('部分文件仍被 Windows 占用。请重新启动计算机，卸载会自动继续。',
+      MsgBox('Windows 正在完成驱动或设备栈的安全清理。请重新启动计算机，卸载会自动继续。',
         mbInformation, MB_OK);
     ExitProcess(3010);
   end;
