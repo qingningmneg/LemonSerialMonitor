@@ -1,0 +1,45 @@
+[Version]
+Signature = "$WINDOWS NT$"
+Class = System
+ClassGuid = {4D36E97D-E325-11CE-BFC1-08002BE10318}
+Provider = %ProviderName%
+DriverVer = 07/10/2026,1.0.0.0
+CatalogFile = CommMonitor.Driver.cat
+PnpLockdown = 1
+
+[DestinationDirs]
+DefaultDestDir = 13
+CommMonitorFilter.CopyFiles = 13
+
+[SourceDisksNames]
+1 = %DiskName%,,,
+
+[SourceDisksFiles]
+CommMonitor.Driver.sys = 1
+
+[DefaultInstall.NTamd64]
+CopyFiles = CommMonitorFilter.CopyFiles
+
+[DefaultInstall.NTamd64.Services]
+AddService = CommMonitorFilter,,CommMonitorFilter.Service
+
+[DefaultInstall.NTamd64.Wdf]
+KmdfService = CommMonitorFilter,CommMonitorFilter.Wdf
+
+[CommMonitorFilter.CopyFiles]
+CommMonitor.Driver.sys
+
+[CommMonitorFilter.Service]
+DisplayName = %ServiceName%
+ServiceType = 1
+StartType = 3
+ErrorControl = 1
+ServiceBinary = %13%\CommMonitor.Driver.sys
+
+[CommMonitorFilter.Wdf]
+KmdfLibraryVersion = $KMDFVERSION$
+
+[Strings]
+ProviderName = "Lemon Serial Monitor"
+ServiceName = "Lemon Serial Monitor Port Filter"
+DiskName = "Lemon Serial Monitor Driver Installation Media"

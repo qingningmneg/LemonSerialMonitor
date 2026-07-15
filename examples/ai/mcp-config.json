@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "lemon-serial-monitor": {
+      "command": "C:\\Program Files\\Lemon串口监控\\ai\\Lemon.SerialMonitor.AI.exe",
+      "args": ["mcp"]
+    }
+  }
+}

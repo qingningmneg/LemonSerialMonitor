@@ -1,0 +1,20 @@
+name: Lemon visible-brand guard
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  visible-brand:
+    runs-on: windows-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Reject retired visible branding
+        shell: pwsh
+        run: ./scripts/Test-LemonBrand.ps1

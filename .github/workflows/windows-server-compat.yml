@@ -1,0 +1,86 @@
+name: Windows Server compatibility
+
+on:
+  push:
+    paths:
+      - ".github/workflows/windows-server-compat.yml"
+      - "scripts/**"
+      - "src/**"
+      - "tests/**"
+  pull_request:
+    paths:
+      - ".github/workflows/windows-server-compat.yml"
+      - "scripts/**"
+      - "src/**"
+      - "tests/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  managed-server-compatibility:
+    name: ${{ matrix.os }} managed compatibility
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-2022
+            build: 20348
+          - os: windows-2025
+            build: 26100
+    runs-on: ${{ matrix.os }}
+
+    # Server 2019 requires a self-hosted VM because its hosted runner retired.
+    # This hosted job does not install the kernel driver; driver load/unload,
+    # Server Core and RDP coverage remain mandatory real-VM release gates.
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Verify actual Server platform contract
+        shell: powershell
+        run: |
+          Import-Module .\scripts\Lemon.Platform.psm1 -Force
+          $platform = Get-LemonWindowsPlatform
+          $platform | ConvertTo-Json -Depth 4
+          if (-not $platform.Supported) {
+              throw "Runner platform rejected: $($platform.ReasonCode)"
+          }
+          if ($platform.PlatformKind -ne 'ServerDesktop') {
+              throw "Expected ServerDesktop, got $($platform.PlatformKind)"
+          }
+          if ($platform.BuildNumber -ne ${{ matrix.build }}) {
+              throw "Expected build ${{ matrix.build }}, got $($platform.BuildNumber)"
+          }
+
+      - name: Run platform and installer contract tests
+        shell: powershell
+        run: |
+          Install-Module Pester `
+              -RequiredVersion 4.10.1 `
+              -Scope CurrentUser `
+              -Force `
+              -SkipPublisherCheck
+          Import-Module Pester -RequiredVersion 4.10.1 -Force
+          $result = Invoke-Pester `
+              -Script .\tests\powershell\LemonPlatform.Tests.ps1 `
+              -PassThru
+          if ($result.FailedCount -ne 0) {
+              throw "$($result.FailedCount) platform test(s) failed."
+          }
+
+      - name: Run managed tests
+        shell: powershell
+        run: |
+          dotnet test .\tests\CommMonitor.Core.Tests\CommMonitor.Core.Tests.csproj `
+              --configuration Release --nologo
+          dotnet test .\tests\CommMonitor.Service.Tests\CommMonitor.Service.Tests.csproj `
+              --configuration Release --nologo
+          dotnet test .\tests\CommMonitor.App.Tests\CommMonitor.App.Tests.csproj `
+              --configuration Release --nologo

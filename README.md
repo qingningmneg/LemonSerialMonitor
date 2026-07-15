@@ -1,0 +1,114 @@
+# Lemon串口监控
+
+我做这个工具，是为了在 Windows 上查看已经发生的串口通信，同时尽量不改变原软件的串口使用方式。它通过内核过滤驱动复制串口读写事件，桌面程序本身不打开 COM 端口，所以原业务程序仍然是端口的实际使用者。
+
+当前版本为 `0.1.0`，提供 Windows x64 安装包、桌面监控界面、命令行接口和 MCP 接口。个人使用免费。仓库目前没有附加开源许可证；可以查看代码和下载个人使用，但未经另行许可不要把代码或安装包改名后重新发布。
+
+## 下载与安装
+
+正式安装包发布在 GitHub 的 **Releases** 页面，文件名为：
+
+```text
+Lemon串口监控-安装程序-x64.exe
+```
+
+安装时不需要打开 PowerShell：
+
+1. 双击安装包。
+2. 阅读并接受“本地测试证书使用说明”。
+3. 选择桌面程序安装位置。
+4. 点击“安装”，在 Windows 提示时允许管理员权限。
+5. 如果安装程序提示重启，请立即重启；重启后再打开软件。
+
+当前驱动使用本地测试证书，不是微软正式发布签名。安装程序会自动核对安装包、导入随包公钥证书，并在需要时启用 Windows `TESTSIGNING`。它不会关闭安全启动，也不会修改 BitLocker。安全启动处于开启状态时，安装会停止。
+
+完整说明见 [安装与卸载](docs/INSTALL.md)。
+
+完整操作手册可直接查看或保存：[PDF 版](manual/Lemon串口监控-完整操作手册.pdf)、[Word 版](manual/Lemon串口监控-完整操作手册.docx)。
+
+## 支持的系统
+
+- Windows 10 x64
+- Windows 11 x64
+- Windows Server 2019 x64（桌面体验 / Server Core）
+- Windows Server 2022 x64（桌面体验 / Server Core）
+- Windows Server 2025 x64（桌面体验 / Server Core）
+
+Server Core 不安装 WPF 桌面程序，只安装驱动、后台服务、AI/命令行接口和文档。x86、ARM64、未知 Windows Server 构建以及安全启动开启的环境会被安装程序拒绝。
+
+0.1.0 发布候选已在 Windows 11 x64 实机完成图形安装向导并进入等待重启状态；驱动启动、AI 接口、完整卸载与重装验收将在重启后继续。Windows Server 六种组合已通过自动化兼容矩阵，但本次没有可用的 Server 实机或虚拟机做真实硬件验收；重要环境请先在同版本测试机验证。具体范围见 [0.1.0 发布说明](docs/RELEASE_NOTES_0.1.0.md)。
+
+## 主要功能
+
+- 不由桌面程序占用 COM 端口，监控一个或多个串口的 Read、Write 和配置控制事件。
+- 列表、Dump、终端三种查看方式。
+- 显示时间、进程、端口、方向、操作码、状态、长度、标志、HEX 和文本。
+- HEX 与文本循环查找；HEX 支持 `??` 单字节通配符。
+- 多行选择后可复制为空格 HEX、紧凑 HEX、文本、C 数组、Python `bytes`、TSV、CSV 或 JSON。
+- `Ctrl+C` 使用当前复制格式；`Ctrl+Shift+C` 只复制连续的空格 HEX 数据。
+- 会话自动写入受保护的本机数据库；停止后可导出 CSV、TXT 或 RAW。
+- 本机 AI 接口支持状态、端口、开始/暂停/继续/停止、会话列表、分页读取、等待新事件、导出和协议描述。
+- AI 接口提供标准 MCP stdio 服务，不开放 HTTP 端口，也不接受发送、注入、重放或任意文件访问。
+- 图形化完整卸载；按受保护安装记录精确移除本软件文件、服务、驱动、过滤器、证书和数据。
+
+## 三分钟开始监控
+
+1. 打开原来使用串口的业务软件，让它正常连接设备。
+2. 打开 Lemon串口监控，点击“刷新端口”。
+3. 勾选要看的 COM 端口，填写一个会话文件名，例如 `board-test.db`。
+4. 点击“开始”。
+5. 让原业务软件真正发送或读取数据。
+6. 在“列表”“Dump”“终端”之间切换查看。
+7. 结束时先点击“停止”，再按需要复制或导出。
+
+如果列表没有数据，先确认已经点了“开始”，并确认原业务软件在“开始”之后确实对同一个 COM 端口发生了读写。监控工具不会主动向设备发送数据。
+
+完整界面说明见 [操作指南](docs/USER_GUIDE.md)，问题处理见 [故障排查](docs/TROUBLESHOOTING.md)。
+
+## AI 接入
+
+安装后的 AI 客户端默认位于：
+
+```text
+C:\Program Files\Lemon串口监控\ai\Lemon.SerialMonitor.AI.exe
+```
+
+如果安装时选择了其他位置，请使用实际路径。
+
+命令行快速检查：
+
+```powershell
+& 'C:\Program Files\Lemon串口监控\ai\Lemon.SerialMonitor.AI.exe' status --json
+& 'C:\Program Files\Lemon串口监控\ai\Lemon.SerialMonitor.AI.exe' ports --json
+```
+
+MCP 配置示例：
+
+```json
+{
+  "mcpServers": {
+    "lemon-serial-monitor": {
+      "command": "C:\\Program Files\\Lemon串口监控\\ai\\Lemon.SerialMonitor.AI.exe",
+      "args": ["mcp"]
+    }
+  }
+}
+```
+
+详细接入步骤见 [AI 接入指南](docs/AI_INTEGRATION.md)，命令、工具、字段和完整性规则见 [AI 接口参考](docs/AI_API_REFERENCE.md)。
+
+## 数据与卸载
+
+会话和导出文件默认保存在受保护的 `%ProgramData%` 数据目录中。卸载程序会明确提示：**完整卸载会永久删除本软件产生的全部会话、导出、设置、日志和 AI 状态**。需要保留的数据必须先导出或备份。
+
+可以从“设置 → 应用 → 已安装的应用 → Lemon串口监控 → 卸载”进入完整卸载。遇到正在使用的驱动或文件时，卸载程序会安排重启后继续清理并再次核验残留。
+
+## 从源码构建
+
+仓库已经包含生成安装包所需的已验收 DOCX/PDF 手册。源码构建还需要 Visual Studio 2022、WDK、Spectre 库、.NET SDK、Pester 和 Inno Setup 6.7.3。构建、签名、测试与安装包命令见 [构建说明](docs/BUILD.md)。
+
+安全边界和威胁模型见 [安全说明](docs/SECURITY.md)，版本变化见 [0.1.0 发布说明](docs/RELEASE_NOTES_0.1.0.md)。
+
+## 独立实现
+
+本项目的代码、协议、会话格式、安装流程和界面均为独立实现，不包含其他串口软件的二进制、图标、商标、私有代码或素材。
