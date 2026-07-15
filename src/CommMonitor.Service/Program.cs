@@ -171,16 +171,6 @@ await CaptureServiceStartup.InitializeAsync(
 CaptureSourceStatus sourceStatus = await host.Services
     .GetRequiredService<ICaptureSourceStatusProvider>()
     .GetStatusAsync(CancellationToken.None);
-if (sourceStatus.Kind == CaptureSourceStatusKind.Ready)
-{
-    logger.LogInformation("{CaptureSourceStatus}", sourceStatus.Message);
-}
-else
-{
-    logger.LogWarning(
-        "Capture source status {CaptureSourceStatusKind}: {CaptureSourceStatus}",
-        sourceStatus.Kind,
-        sourceStatus.Message);
-}
+CaptureServiceStartup.EnsureSourceStatusAllowsStartup(sourceStatus, logger);
 
 await host.RunAsync();

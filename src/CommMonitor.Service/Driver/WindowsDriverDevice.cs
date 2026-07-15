@@ -53,10 +53,16 @@ internal sealed class WindowsDriverDeviceFactory : IDriverDeviceFactory
         {
             handle.Dispose();
             var nativeError = new Win32Exception(openResult.ErrorCode);
-            throw new DriverUnavailableException(
-                $"Cannot open the Lemon serial monitor driver control device '{DevicePath}': " +
-                nativeError.Message,
-                nativeError);
+            if (openResult.ErrorCode is NativeMethods.ErrorFileNotFound or
+                NativeMethods.ErrorPathNotFound)
+            {
+                throw new DriverUnavailableException(
+                    $"Cannot open the Lemon serial monitor driver control device '{DevicePath}': " +
+                    nativeError.Message,
+                    nativeError);
+            }
+
+            throw nativeError;
         }
 
         try
@@ -69,7 +75,7 @@ internal sealed class WindowsDriverDeviceFactory : IDriverDeviceFactory
             error is ArgumentException or IOException or Win32Exception)
         {
             handle.Dispose();
-            throw new DriverUnavailableException(
+            throw new InvalidOperationException(
                 $"Cannot bind overlapped I/O for the Lemon serial monitor driver control device " +
                 $"'{DevicePath}'.",
                 error);

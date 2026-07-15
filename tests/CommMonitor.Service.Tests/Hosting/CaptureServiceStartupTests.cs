@@ -42,4 +42,23 @@ public sealed class CaptureServiceStartupTests
                 NullLogger.Instance,
                 cancellation.Token));
     }
+
+    [Theory]
+    [InlineData(CaptureSourceStatusKind.Ready)]
+    [InlineData(CaptureSourceStatusKind.DevelopmentFake)]
+    [InlineData(CaptureSourceStatusKind.DriverUnavailable)]
+    public void Allowed_source_statuses_can_start_the_host(CaptureSourceStatusKind kind) =>
+        CaptureServiceStartup.EnsureSourceStatusAllowsStartup(
+            new CaptureSourceStatus(kind, "scripted"),
+            NullLogger.Instance);
+
+    [Theory]
+    [InlineData(CaptureSourceStatusKind.ProtocolMismatch)]
+    [InlineData(CaptureSourceStatusKind.Faulted)]
+    [InlineData((CaptureSourceStatusKind)999)]
+    public void Fatal_source_statuses_abort_host_startup(CaptureSourceStatusKind kind) =>
+        Assert.Throws<InvalidOperationException>(() =>
+            CaptureServiceStartup.EnsureSourceStatusAllowsStartup(
+                new CaptureSourceStatus(kind, "scripted"),
+                NullLogger.Instance));
 }

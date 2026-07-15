@@ -15,6 +15,7 @@ internal static class NativeMethods
 
     internal const int ErrorSuccess = 0;
     internal const int ErrorFileNotFound = 2;
+    internal const int ErrorPathNotFound = 3;
     internal const int ErrorAccessDenied = 5;
     internal const int ErrorOperationAborted = 995;
     internal const int ErrorIoPending = 997;

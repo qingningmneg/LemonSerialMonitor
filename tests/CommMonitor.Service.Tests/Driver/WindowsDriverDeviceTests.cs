@@ -33,14 +33,17 @@ public sealed class WindowsDriverDeviceTests
         Assert.True(api.Handle.IsClosed);
     }
 
-    [Fact]
-    public async Task Factory_maps_an_invalid_control_handle_to_driver_unavailable()
+    [Theory]
+    [InlineData(NativeMethods.ErrorFileNotFound)]
+    [InlineData(NativeMethods.ErrorPathNotFound)]
+    public async Task Factory_maps_only_missing_control_device_errors_to_unavailable(
+        int errorCode)
     {
         var api = new FakeWindowsDriverApi
         {
             OpenResult = new DriverHandleOpenResult(
                 new SafeFileHandle(new IntPtr(-1), ownsHandle: false),
-                NativeMethods.ErrorFileNotFound),
+                errorCode),
         };
         var bindingFactory = new FakeOverlappedBindingFactory(
             new FakeOverlappedBinding());
@@ -55,6 +58,41 @@ public sealed class WindowsDriverDeviceTests
             StringComparison.Ordinal);
         Assert.Contains("CommMonitorFilter", error.Message, StringComparison.Ordinal);
         Assert.Equal(0, bindingFactory.BindCount);
+    }
+
+    [Fact]
+    public async Task Factory_preserves_access_denied_as_a_fatal_win32_error()
+    {
+        var api = new FakeWindowsDriverApi
+        {
+            OpenResult = new DriverHandleOpenResult(
+                new SafeFileHandle(new IntPtr(-1), ownsHandle: false),
+                NativeMethods.ErrorAccessDenied),
+        };
+        var factory = new WindowsDriverDeviceFactory(
+            api,
+            new FakeOverlappedBindingFactory(new FakeOverlappedBinding()));
+
+        Win32Exception error = await Assert.ThrowsAsync<Win32Exception>(
+            () => factory.OpenAsync(CancellationToken.None).AsTask());
+
+        Assert.Equal(NativeMethods.ErrorAccessDenied, error.NativeErrorCode);
+    }
+
+    [Fact]
+    public async Task Factory_preserves_binding_failure_as_fatal()
+    {
+        var failure = new IOException("binding failed");
+        var api = new FakeWindowsDriverApi();
+        var factory = new WindowsDriverDeviceFactory(
+            api,
+            new ThrowingOverlappedBindingFactory(failure));
+
+        InvalidOperationException error = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => factory.OpenAsync(CancellationToken.None).AsTask());
+
+        Assert.Same(failure, error.InnerException);
+        Assert.True(api.Handle.IsClosed);
     }
 
     [Theory]
@@ -283,6 +321,12 @@ public sealed class WindowsDriverDeviceTests
             BindCount++;
             return binding;
         }
+    }
+
+    private sealed class ThrowingOverlappedBindingFactory(IOException exception)
+        : IOverlappedBindingFactory
+    {
+        public IOverlappedBinding Bind(SafeFileHandle handle) => throw exception;
     }
 
     private sealed class FakeOverlappedBinding : IOverlappedBinding

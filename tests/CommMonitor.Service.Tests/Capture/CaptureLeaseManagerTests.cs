@@ -4,9 +4,12 @@ using CommMonitor.Core.Ai;
 using CommMonitor.Core.Models;
 using CommMonitor.Core.Sessions;
 using CommMonitor.Service.Capture;
+using CommMonitor.Service.Driver;
+using CommMonitor.Service.Hosting;
 using CommMonitor.Service.Ipc;
 using CommMonitor.Service.Security;
 using CommMonitor.Service.Sessions;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace CommMonitor.Service.Tests.Capture;
 
@@ -275,7 +278,62 @@ public sealed class CaptureLeaseManagerTests
     }
 
     [Fact]
-    public async Task Startup_stop_failure_stays_degraded_and_blocks_mutation()
+    public async Task Authority_driver_unavailable_statistics_allow_degraded_host_startup()
+    {
+        await using var context = new AuthorityContext(
+            new ScriptedStatisticsFailureSource(
+                new DriverUnavailableException("Scripted missing control device.")));
+
+        await CaptureServiceStartup.InitializeAsync(
+            context.Authority.InitializeAsync,
+            NullLogger.Instance,
+            CancellationToken.None);
+    }
+
+    [Fact]
+    public async Task Authority_protocol_statistics_failure_aborts_host_startup()
+    {
+        await using var context = new AuthorityContext(
+            new ScriptedStatisticsFailureSource(
+                new InvalidDataException("Scripted protocol mismatch.")));
+
+        await Assert.ThrowsAsync<InvalidDataException>(() =>
+            CaptureServiceStartup.InitializeAsync(
+                context.Authority.InitializeAsync,
+                NullLogger.Instance,
+                CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task Authority_general_statistics_failure_aborts_host_startup()
+    {
+        await using var context = new AuthorityContext(
+            new ScriptedStatisticsFailureSource(
+                new InvalidOperationException("Scripted statistics failure.")));
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            CaptureServiceStartup.InitializeAsync(
+                context.Authority.InitializeAsync,
+                NullLogger.Instance,
+                CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task Authority_unrelated_statistics_cancellation_aborts_host_startup()
+    {
+        await using var context = new AuthorityContext(
+            new ScriptedStatisticsFailureSource(
+                new OperationCanceledException("Scripted unrelated cancellation.")));
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            CaptureServiceStartup.InitializeAsync(
+                context.Authority.InitializeAsync,
+                NullLogger.Instance,
+                CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task Authority_non_missing_orphan_stop_failure_aborts_host_startup()
     {
         await using var context = new AuthorityContext();
         _ = await context.StartAiAsync(Owner, Now);
@@ -284,17 +342,17 @@ public sealed class CaptureLeaseManagerTests
             context.CreateFreshRestartedAuthority(source);
         await using (restartedCoordinator)
         {
-            CaptureLeaseException degraded = await Assert.ThrowsAsync<CaptureLeaseException>(
+            IOException failure = await Assert.ThrowsAsync<IOException>(
                 () => restarted.InitializeAsync());
-            Assert.Equal(AiErrorCodes.DriverUnavailable, degraded.Code);
+            Assert.Equal("Scripted startup driver-stop failure.", failure.Message);
             Assert.Equal(CaptureState.Running, context.DriverState.State);
             Assert.Equal(1, source.ConfigureCalls);
 
-            CaptureLeaseException blocked = await Assert.ThrowsAsync<CaptureLeaseException>(() =>
+            IOException retryFailure = await Assert.ThrowsAsync<IOException>(() =>
                 restarted.StartWpfAsync(new CaptureSelection(
                     Devices(0x44),
                     Path.Combine(context.Boundary.SessionRoot, "blocked.cmsession"))));
-            Assert.Equal(AiErrorCodes.DriverUnavailable, blocked.Code);
+            Assert.Equal(failure.Message, retryFailure.Message);
             Assert.Equal(2, source.ConfigureCalls);
             Assert.Equal(CaptureState.Running, context.DriverState.State);
         }
@@ -966,6 +1024,30 @@ public sealed class CaptureLeaseManagerTests
                 DateTimeOffset.UtcNow,
                 null));
         }
+
+        public async IAsyncEnumerable<CaptureEvent> ReadAllAsync(
+            [System.Runtime.CompilerServices.EnumeratorCancellation]
+            CancellationToken cancellationToken)
+        {
+            await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+            yield break;
+        }
+
+        public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+    }
+
+    private sealed class ScriptedStatisticsFailureSource(Exception exception)
+        : ICaptureSource, ICaptureSourceStatisticsProvider
+    {
+        public ValueTask ConfigureAsync(
+            CaptureState state,
+            IReadOnlySet<ulong> deviceIds,
+            CancellationToken cancellationToken) =>
+            ValueTask.CompletedTask;
+
+        public ValueTask<CaptureSourceStatistics> GetStatisticsAsync(
+            CancellationToken cancellationToken) =>
+            ValueTask.FromException<CaptureSourceStatistics>(exception);
 
         public async IAsyncEnumerable<CaptureEvent> ReadAllAsync(
             [System.Runtime.CompilerServices.EnumeratorCancellation]

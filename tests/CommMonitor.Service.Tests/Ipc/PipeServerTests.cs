@@ -1,15 +1,21 @@
 using System.Collections.Immutable;
 using System.IO.Pipes;
+using System.Runtime.Versioning;
 using System.Security.AccessControl;
 using System.Security.Principal;
 using System.Text.Json;
 using System.Threading.Channels;
+using CommMonitor.Core.Ai;
 using CommMonitor.Core.Ipc;
 using CommMonitor.Core.Models;
 using CommMonitor.Core.Sessions;
 using CommMonitor.Service.Capture;
+using CommMonitor.Service.Driver;
+using CommMonitor.Service.Hosting;
 using CommMonitor.Service.Ipc;
 using CommMonitor.Service.Ports;
+using CommMonitor.Service.Security;
+using CommMonitor.Service.Sessions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -134,6 +140,164 @@ public sealed class PipeServerTests
         Assert.Equal(
             new[] { "Start", "Pause", "Resume", "Stop" },
             host.WpfController.Calls);
+    }
+
+    [Fact]
+    [SupportedOSPlatform("windows")]
+    public async Task Production_composition_recovers_and_enforces_authority_ownership()
+    {
+        await using var host = new ProductionPipeHost(initiallyAvailable: false);
+        await CaptureServiceStartup.InitializeAsync(
+            host.Authority.InitializeAsync,
+            NullLogger.Instance,
+            CancellationToken.None);
+        await host.StartAsync();
+        await using NamedPipeClientStream client = await host.ConnectAsync();
+        const string sessionName = "recoverable.cmsession";
+        string sessionPath = Path.Combine(host.SessionRoot, sessionName);
+        var startCommand = new PipeCommand(
+            "production-start",
+            PipeCommandName.Start,
+            [17],
+            sessionName);
+
+        PipeReply unavailableStart = await SendAsync(client, startCommand);
+
+        Assert.False(unavailableStart.Success);
+        Assert.Contains("missing", unavailableStart.Error!, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(CaptureState.Stopped, host.Coordinator.State);
+        Assert.False(File.Exists(sessionPath));
+
+        host.Source.MakeAvailable();
+
+        PipeReply start = await SendAsync(client, startCommand);
+        Assert.True(start.Success, start.Error);
+        Assert.Equal(CaptureState.Running, host.Coordinator.State);
+        Assert.True(File.Exists(sessionPath));
+
+        PipeReply pause = await SendAsync(
+            client,
+            new PipeCommand("production-pause", PipeCommandName.Pause));
+        Assert.True(pause.Success, pause.Error);
+        Assert.Equal(CaptureState.Paused, host.Coordinator.State);
+
+        PipeReply resume = await SendAsync(
+            client,
+            new PipeCommand("production-resume", PipeCommandName.Resume));
+        Assert.True(resume.Success, resume.Error);
+        Assert.Equal(CaptureState.Running, host.Coordinator.State);
+
+        PipeReply stop = await SendAsync(
+            client,
+            new PipeCommand("production-stop", PipeCommandName.Stop));
+        Assert.True(stop.Success, stop.Error);
+        Assert.Equal(CaptureState.Stopped, host.Coordinator.State);
+        Assert.False(host.Leases.HasReservationOrLease(DateTimeOffset.UtcNow));
+
+        var owner = new CaptureClientOwner(
+            "S-1-5-21-2000",
+            0x0000_0002_0000_0003,
+            "production-ai");
+        DateTimeOffset now = DateTimeOffset.UtcNow;
+        PreparedLease prepared = await host.Authority.PrepareAiStartAsync(
+            owner,
+            new HashSet<ulong> { 17 },
+            "production-ai",
+            now);
+        ActiveLease active = await host.Authority.CommitAiStartAsync(
+            owner,
+            prepared.ReservationId,
+            prepared.Secret,
+            now + TimeSpan.FromSeconds(1));
+        Assert.Equal(CaptureState.Running, host.Coordinator.State);
+
+        PipeReply wpfPause = await SendAsync(
+            client,
+            new PipeCommand("wpf-pause-ai-owner", PipeCommandName.Pause));
+        Assert.False(wpfPause.Success);
+        Assert.Equal(CaptureState.Running, host.Coordinator.State);
+
+        active = await host.Authority.PauseAiAsync(
+            owner,
+            active.LeaseId,
+            active.Secret,
+            active.Generation);
+        PipeReply wpfResume = await SendAsync(
+            client,
+            new PipeCommand("wpf-resume-ai-owner", PipeCommandName.Resume));
+        Assert.False(wpfResume.Success);
+        Assert.Equal(CaptureState.Paused, host.Coordinator.State);
+
+        await host.Authority.StopAiAsync(
+            owner,
+            active.LeaseId,
+            active.Secret,
+            active.Generation);
+        Assert.Equal(CaptureState.Stopped, host.Coordinator.State);
+        Assert.False(host.Leases.HasReservationOrLease(DateTimeOffset.UtcNow));
+    }
+
+    [Fact]
+    [SupportedOSPlatform("windows")]
+    public async Task Production_composition_concurrent_wpf_and_ai_start_has_one_winner()
+    {
+        await using var host = new ProductionPipeHost(initiallyAvailable: true);
+        await CaptureServiceStartup.InitializeAsync(
+            host.Authority.InitializeAsync,
+            NullLogger.Instance,
+            CancellationToken.None);
+        await host.StartAsync();
+        await using NamedPipeClientStream client = await host.ConnectAsync();
+        host.Source.BlockNextStart();
+
+        Task<PipeReply> wpfStart = SendAsync(
+            client,
+            new PipeCommand(
+                "concurrent-wpf-start",
+                PipeCommandName.Start,
+                [17],
+                "concurrent-wpf.cmsession"));
+        await host.Source.StartEntered.WaitAsync(TestTimeout);
+
+        var owner = new CaptureClientOwner(
+            "S-1-5-21-3000",
+            0x0000_0003_0000_0004,
+            "concurrent-ai");
+        DateTimeOffset now = DateTimeOffset.UtcNow;
+        Task<PreparedLease> aiPrepare = host.Authority.PrepareAiStartAsync(
+            owner,
+            new HashSet<ulong> { 99 },
+            "concurrent-ai",
+            now).AsTask();
+        Assert.False(aiPrepare.IsCompleted);
+
+        host.Source.ReleaseStart();
+
+        PipeReply wpfReply = await wpfStart.WaitAsync(TestTimeout);
+        CaptureLeaseException conflict = await Assert.ThrowsAsync<CaptureLeaseException>(
+            () => aiPrepare.WaitAsync(TestTimeout));
+        Assert.True(wpfReply.Success, wpfReply.Error);
+        Assert.Equal(AiErrorCodes.CaptureConflict, conflict.Code);
+        Assert.Equal(CaptureState.Running, host.Coordinator.State);
+        Assert.Equal(CaptureState.Running, host.Source.State);
+        Assert.False(host.Leases.HasReservationOrLease(now + TimeSpan.FromSeconds(1)));
+
+        PipeReply pause = await SendAsync(
+            client,
+            new PipeCommand("concurrent-wpf-pause", PipeCommandName.Pause));
+        Assert.True(pause.Success, pause.Error);
+        Assert.Equal(CaptureState.Paused, host.Coordinator.State);
+        PipeReply resume = await SendAsync(
+            client,
+            new PipeCommand("concurrent-wpf-resume", PipeCommandName.Resume));
+        Assert.True(resume.Success, resume.Error);
+        PipeReply stop = await SendAsync(
+            client,
+            new PipeCommand("concurrent-wpf-stop", PipeCommandName.Stop));
+        Assert.True(stop.Success, stop.Error);
+        Assert.Equal(CaptureState.Stopped, host.Coordinator.State);
+        Assert.Equal(CaptureState.Stopped, host.Source.State);
+        Assert.False(host.Leases.HasReservationOrLease(now + TimeSpan.FromSeconds(2)));
     }
 
     [Fact]
@@ -452,6 +616,12 @@ public sealed class PipeServerTests
         return await PipeFrameCodec.ReadAsync<T>(stream, cancellation.Token);
     }
 
+    private static async Task<PipeReply> SendAsync(Stream stream, PipeCommand command)
+    {
+        await PipeFrameCodec.WriteAsync(stream, command);
+        return await ReadWithTimeoutAsync<PipeReply>(stream);
+    }
+
     private static async Task WaitForStateAsync(
         CaptureCoordinator coordinator,
         CaptureState expectedState)
@@ -617,6 +787,91 @@ public sealed class PipeServerTests
         }
     }
 
+    [SupportedOSPlatform("windows")]
+    private sealed class ProductionPipeHost : IAsyncDisposable
+    {
+        private readonly string _root = Path.Combine(
+            Path.GetTempPath(),
+            $"commmonitor-production-pipe-{Guid.NewGuid():N}");
+        private readonly ServiceStorageBoundary _authorityBoundary;
+        private bool _started;
+
+        public ProductionPipeHost(bool initiallyAvailable)
+        {
+            SessionRoot = Path.Combine(_root, "Sessions");
+            ExportRoot = Path.Combine(_root, "Exports");
+            _authorityBoundary = ServiceStorageBoundary.Open(
+                _root,
+                SessionRoot,
+                ExportRoot);
+            var catalog = new SessionCatalog(
+                _authorityBoundary,
+                new ProductionMemoryKeyRing());
+            Source = new RecoverableCaptureSource(initiallyAvailable);
+            Coordinator = new CaptureCoordinator(Source, new SessionStoreFactory());
+            Leases = new CaptureLeaseManager();
+            Authority = new CaptureAuthority(
+                Coordinator,
+                Source,
+                Leases,
+                _authorityBoundary,
+                catalog);
+            PipeName = $"CommMonitor.Service.Tests.Production.{Guid.NewGuid():N}";
+            Server = new PipeServer(
+                Coordinator,
+                Authority,
+                new StaticPortCatalog([]),
+                Source,
+                NullLogger<PipeServer>.Instance,
+                PipeName,
+                SessionRoot,
+                ExportRoot);
+        }
+
+        public string PipeName { get; }
+        public string SessionRoot { get; }
+        public string ExportRoot { get; }
+        public RecoverableCaptureSource Source { get; }
+        public CaptureCoordinator Coordinator { get; }
+        public CaptureLeaseManager Leases { get; }
+        public CaptureAuthority Authority { get; }
+        public PipeServer Server { get; }
+
+        public async Task StartAsync()
+        {
+            await Server.StartAsync(CancellationToken.None);
+            _started = true;
+        }
+
+        public Task<NamedPipeClientStream> ConnectAsync() =>
+            PipeServerTests.ConnectAsync(PipeName);
+
+        public async ValueTask DisposeAsync()
+        {
+            if (_started)
+            {
+                using var cancellation = new CancellationTokenSource(TestTimeout);
+                await Server.StopAsync(cancellation.Token);
+            }
+
+            Server.Dispose();
+            await Coordinator.DisposeAsync();
+            _authorityBoundary.Dispose();
+            try
+            {
+                Directory.Delete(_root, recursive: true);
+            }
+            catch (IOException)
+            {
+                // SQLite/AV teardown may briefly retain a handle; content is under temp.
+            }
+            catch (UnauthorizedAccessException)
+            {
+                // Best-effort cleanup only.
+            }
+        }
+    }
+
     private sealed class RecordingWpfCaptureController(CaptureCoordinator coordinator)
         : IWpfCaptureController
     {
@@ -675,6 +930,142 @@ public sealed class PipeServerTests
             cancellationToken.ThrowIfCancellationRequested();
             return ValueTask.FromResult(status);
         }
+    }
+
+    private sealed class RecoverableCaptureSource(bool initiallyAvailable)
+        : ICaptureSource, ICaptureSourceStatisticsProvider, ICaptureSourceStatusProvider
+    {
+        private readonly object _gate = new();
+        private readonly Channel<CaptureEvent> _events = Channel.CreateUnbounded<CaptureEvent>();
+        private readonly TaskCompletionSource _startEntered =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly TaskCompletionSource _releaseStart =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private bool _available = initiallyAvailable;
+        private CaptureState _state;
+        private int _blockNextStart;
+
+        public Task StartEntered => _startEntered.Task;
+
+        public CaptureState State
+        {
+            get
+            {
+                lock (_gate)
+                {
+                    return _state;
+                }
+            }
+        }
+
+        public void MakeAvailable()
+        {
+            lock (_gate)
+            {
+                _available = true;
+            }
+        }
+
+        public void BlockNextStart() => Volatile.Write(ref _blockNextStart, 1);
+
+        public void ReleaseStart() => _releaseStart.TrySetResult();
+
+        public async ValueTask ConfigureAsync(
+            CaptureState state,
+            IReadOnlySet<ulong> deviceIds,
+            CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            EnsureAvailable();
+            if (state == CaptureState.Running &&
+                Interlocked.Exchange(ref _blockNextStart, 0) == 1)
+            {
+                _startEntered.TrySetResult();
+                await _releaseStart.Task.WaitAsync(cancellationToken);
+            }
+
+            lock (_gate)
+            {
+                _state = state;
+            }
+        }
+
+        public ValueTask<CaptureSourceStatistics> GetStatisticsAsync(
+            CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            EnsureAvailable();
+            return ValueTask.FromResult(new CaptureSourceStatistics(
+                true,
+                0,
+                State,
+                0,
+                0,
+                DateTimeOffset.UtcNow,
+                null));
+        }
+
+        public ValueTask<CaptureSourceStatus> GetStatusAsync(
+            CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            lock (_gate)
+            {
+                return ValueTask.FromResult(_available
+                    ? new CaptureSourceStatus(
+                        CaptureSourceStatusKind.Ready,
+                        "Scripted recoverable capture source is ready.")
+                    : new CaptureSourceStatus(
+                        CaptureSourceStatusKind.DriverUnavailable,
+                        "Scripted missing control device."));
+            }
+        }
+
+        public IAsyncEnumerable<CaptureEvent> ReadAllAsync(
+            CancellationToken cancellationToken) =>
+            _events.Reader.ReadAllAsync(cancellationToken);
+
+        public ValueTask DisposeAsync()
+        {
+            ReleaseStart();
+            _events.Writer.TryComplete();
+            return ValueTask.CompletedTask;
+        }
+
+        private void EnsureAvailable()
+        {
+            lock (_gate)
+            {
+                if (!_available)
+                {
+                    throw new DriverUnavailableException(
+                        "Scripted missing control device.");
+                }
+            }
+        }
+    }
+
+    private sealed class ProductionMemoryKeyRing : IProtectedKeyRing
+    {
+        private readonly ProtectedKeyMaterial _material = new(
+            "production-test-key",
+            Enumerable.Range(0, 32).Select(static value => (byte)value).ToArray());
+
+        public ValueTask<ProtectedKeyMaterial> GetActiveKeyAsync(
+            CancellationToken cancellationToken = default) =>
+            ValueTask.FromResult(_material);
+
+        public ValueTask<ProtectedKeyMaterial> GetKeyAsync(
+            string keyId,
+            DateTimeOffset now,
+            CancellationToken cancellationToken = default) =>
+            ValueTask.FromResult(_material);
+
+        public ValueTask RetainKeyUntilAsync(
+            string keyId,
+            DateTimeOffset expiresAtUtc,
+            CancellationToken cancellationToken = default) =>
+            ValueTask.CompletedTask;
     }
 
     private sealed class NonPersistingSessionStore : ISessionStore

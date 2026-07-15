@@ -5,6 +5,7 @@ using System.Text;
 using CommMonitor.Core.Ai;
 using CommMonitor.Core.Models;
 using CommMonitor.Core.Sessions;
+using CommMonitor.Service.Driver;
 using CommMonitor.Service.Ipc;
 using CommMonitor.Service.Sessions;
 
@@ -550,11 +551,7 @@ internal sealed class CaptureAuthority : IWpfCaptureController
                         cancellationToken)
                     .ConfigureAwait(false);
             }
-            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-            {
-                throw;
-            }
-            catch (Exception exception)
+            catch (DriverUnavailableException exception)
             {
                 SetStartupDegraded(driverStateKnown: true);
                 throw DriverUnavailable(
@@ -604,11 +601,11 @@ internal sealed class CaptureAuthority : IWpfCaptureController
                 .GetStatisticsAsync(cancellationToken)
                 .ConfigureAwait(false);
         }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        catch (OperationCanceledException)
         {
             throw;
         }
-        catch (Exception exception)
+        catch (DriverUnavailableException exception)
         {
             return CaptureSourceStatistics.Unknown(
                 string.IsNullOrWhiteSpace(exception.Message)
