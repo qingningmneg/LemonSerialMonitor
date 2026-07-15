@@ -159,12 +159,14 @@ builder.Services.AddHostedService(services => services.GetRequiredService<AiPipe
 #pragma warning restore CA1416
 
 IHost host = builder.Build();
-await host.Services
-    .GetRequiredService<CaptureAuthority>()
-    .InitializeAsync(CancellationToken.None);
 ILogger logger = host.Services
     .GetRequiredService<ILoggerFactory>()
     .CreateLogger("Lemon.SerialMonitor.Service.Startup");
+CaptureAuthority authority = host.Services.GetRequiredService<CaptureAuthority>();
+await CaptureServiceStartup.InitializeAsync(
+    authority.InitializeAsync,
+    logger,
+    CancellationToken.None);
 CaptureSourceStatus sourceStatus = await host.Services
     .GetRequiredService<ICaptureSourceStatusProvider>()
     .GetStatusAsync(CancellationToken.None);

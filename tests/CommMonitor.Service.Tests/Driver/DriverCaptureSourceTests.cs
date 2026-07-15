@@ -218,6 +218,29 @@ public sealed class DriverCaptureSourceTests
     }
 
     [Fact]
+    public async Task Missing_control_device_is_retried_on_the_next_status_request()
+    {
+        var device = new ScriptedDriverDevice((code, _, output, _) =>
+        {
+            Assert.Equal(DriverProtocol.GetVersionIoControlCode, code);
+            return ValueTask.FromResult(WriteVersion(output));
+        });
+        var factory = new RecoveringDriverDeviceFactory(device);
+        await using var source = new DriverCaptureSource(
+            factory,
+            new StaticPortCatalog([]),
+            new FixedQpcClock(0, DateTimeOffset.UnixEpoch, 10_000_000),
+            new ImmediateCaptureDelay());
+
+        CaptureSourceStatus first = await source.GetStatusAsync(CancellationToken.None);
+        CaptureSourceStatus second = await source.GetStatusAsync(CancellationToken.None);
+
+        Assert.Equal(CaptureSourceStatusKind.DriverUnavailable, first.Kind);
+        Assert.Equal(CaptureSourceStatusKind.Ready, second.Kind);
+        Assert.Equal(2, factory.OpenCalls);
+    }
+
+    [Fact]
     public async Task Returned_count_larger_than_buffer_is_a_protocol_error()
     {
         var device = new ScriptedDriverDevice((code, _, output, _) =>
@@ -380,6 +403,22 @@ public sealed class DriverCaptureSourceTests
     {
         public ValueTask<IDriverDevice> OpenAsync(CancellationToken cancellationToken) =>
             ValueTask.FromException<IDriverDevice>(exception);
+    }
+
+    private sealed class RecoveringDriverDeviceFactory(IDriverDevice device)
+        : IDriverDeviceFactory
+    {
+        public int OpenCalls { get; private set; }
+
+        public ValueTask<IDriverDevice> OpenAsync(CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            OpenCalls++;
+            return OpenCalls == 1
+                ? ValueTask.FromException<IDriverDevice>(
+                    new DriverUnavailableException("driver missing"))
+                : ValueTask.FromResult(device);
+        }
     }
 
     private sealed class StaticPortCatalog(IReadOnlyList<PortInfo> ports) : IPortCatalog
