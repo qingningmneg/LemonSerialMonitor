@@ -157,6 +157,38 @@ Describe 'CommMonitor install path safety' {
             -AdditionalTrustedSids @('S-1-5-21-1-2-3-1001')) | Should Be $true
     }
 
+    It 'trusts the exact authorized profile user for its writable namespace parent' {
+        $path = Join-Path $TestDrive 'authorized-user-parent'
+        New-Item -ItemType Directory -Path $path -Force | Out-Null
+        $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
+        try {
+            $sid = $identity.User
+            $acl = [Security.AccessControl.DirectorySecurity]::new()
+            $acl.SetOwner($sid)
+            $acl.SetAccessRuleProtection($true, $false)
+            $acl.AddAccessRule(
+                [Security.AccessControl.FileSystemAccessRule]::new(
+                    $sid,
+                    [Security.AccessControl.FileSystemRights]::FullControl,
+                    [Security.AccessControl.InheritanceFlags]::ContainerInherit -bor
+                        [Security.AccessControl.InheritanceFlags]::ObjectInherit,
+                    [Security.AccessControl.PropagationFlags]::None,
+                    [Security.AccessControl.AccessControlType]::Allow))
+            Set-Acl -LiteralPath $path -AclObject $acl
+
+            { Assert-CommMonitorTrustedDirectory -Path $path } |
+                Should Throw
+            {
+                Assert-CommMonitorTrustedDirectory `
+                    -Path $path `
+                    -AdditionalTrustedSids @($sid.Value)
+            } | Should Not Throw
+        }
+        finally {
+            $identity.Dispose()
+        }
+    }
+
     It 'uses CreateNew and atomic replacement for protected JSON files' {
         $moduleText = Get-Content -Raw -LiteralPath $modulePath
 

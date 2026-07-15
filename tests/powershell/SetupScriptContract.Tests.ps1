@@ -67,6 +67,26 @@ Describe 'Lemon graphical setup script contracts' {
         $uninstall | Should Not Match '(?m)^\s*if \(\$firstAssessment\.ResidualObjectIds\.Count'
     }
 
+    It 'grants reboot authority only to operation-bound current residuals' {
+        $uninstall = Get-Content -Raw -LiteralPath $uninstallPath -Encoding UTF8
+
+        $uninstall | Should Match '\$pendingAuthorityIds\s*=\s*\[Collections\.Generic\.HashSet\[string\]\]'
+        $uninstall | Should Match '\$pendingAuthorityIds\.Contains\(\[string\]\$_\)'
+        $uninstall | Should Match '-AllowedPendingObjectIds\s+\$currentPendingAuthorityIds'
+        $uninstall | Should Not Match '-AllowedPendingObjectIds\s+\(\[string\[\]\]\$firstAssessment\.ResidualObjectIds\)'
+        foreach ($requiredAuthority in @(
+                'driver-package',
+                'app-root',
+                'ai-root',
+                'ai-parent',
+                'core-root',
+                'data-root',
+                'installer-non-authority')) {
+            $uninstall | Should Match (
+                "pendingAuthorityIds\.Add\('$([regex]::Escape($requiredAuthority))'\)")
+        }
+    }
+
     It 'preserves an empty UpperFilters snapshot as a raw string array' {
         $uninstall = Get-Content -Raw -LiteralPath $uninstallPath -Encoding UTF8
 
@@ -132,6 +152,8 @@ Describe 'Lemon graphical setup script contracts' {
         $install | Should Match 'Get-FileHash.*?SHA256'
 
         $uninstall | Should Match 'AuthorizedClientImagePath'
+        $uninstall | Should Match 'ConvertTo-CommMonitorCanonicalProfileUserSid'
+        $uninstall | Should Match '-AdditionalTrustedSids\s+@\(\$authorizedUserSid\)'
         $status | Should Match 'AuthorizedClientImagePath'
     }
 

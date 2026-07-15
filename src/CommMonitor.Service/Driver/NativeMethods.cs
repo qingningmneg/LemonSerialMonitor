@@ -165,7 +165,7 @@ internal sealed class ThreadPoolOverlappedBindingFactory : IOverlappedBindingFac
         if (!OperatingSystem.IsWindows())
         {
             throw new PlatformNotSupportedException(
-                "The CommMonitor driver transport requires Windows.");
+                "The Lemon serial monitor driver transport requires Windows.");
         }
 
         return new ThreadPoolOverlappedBinding(

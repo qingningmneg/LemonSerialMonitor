@@ -766,7 +766,7 @@ function ConvertFrom-CommMonitorInstallBackupJson {
     process {
         $backup = $Json | ConvertFrom-Json
         if ($backup.SchemaVersion -notin @(1, 2)) {
-            throw "Unsupported CommMonitor install backup schema '$($backup.SchemaVersion)'."
+            throw "Unsupported Lemon serial monitor install backup schema '$($backup.SchemaVersion)'."
         }
 
         if ($backup.UpperFiltersWasNull) {
@@ -10980,7 +10980,7 @@ function Assert-CommMonitorNoReparsePoint {
         $directory = $pending.Pop()
         foreach ($child in @(Get-ChildItem -LiteralPath $directory.FullName -Force)) {
             if (Test-CommMonitorReparseAttributes -Attributes $child.Attributes) {
-                throw "Refusing reparse point inside the CommMonitor tree: '$($child.FullName)'."
+                throw "Refusing reparse point inside the Lemon serial monitor tree: '$($child.FullName)'."
             }
             if ($child.PSIsContainer) {
                 $pending.Push([IO.DirectoryInfo]$child)
@@ -11164,7 +11164,8 @@ function Test-CommMonitorFileManifestMatch {
 function Assert-CommMonitorTrustedDirectory {
     [CmdletBinding()]
     param(
-        [Parameter(Mandatory)][string] $Path
+        [Parameter(Mandatory)][string] $Path,
+        [AllowEmptyCollection()][string[]] $AdditionalTrustedSids = @()
     )
 
     [void](Assert-CommMonitorNoReparsePoint -Path $Path)
@@ -11196,7 +11197,8 @@ function Assert-CommMonitorTrustedDirectory {
     )
     if (-not (Test-CommMonitorAclTrusted `
             -OwnerSid $ownerSid `
-            -AccessRules $rules)) {
+            -AccessRules $rules `
+            -AdditionalTrustedSids $AdditionalTrustedSids)) {
         throw "Refusing pre-existing directory with an untrusted owner or writable ACL: '$Path'."
     }
 }
@@ -11594,7 +11596,7 @@ function Invoke-CommMonitorAdminGuardedAction {
     )
 
     if (-not [bool](& $AdministratorProbe)) {
-        throw 'CommMonitor installation requires an elevated administrator PowerShell.'
+        throw 'Lemon serial monitor installation requires an elevated administrator PowerShell.'
     }
 
     & $WriteAction
@@ -11613,6 +11615,7 @@ Export-ModuleMember -Function @(
     'Get-CommMonitorValidatedRootProbe',
     'Assert-CommMonitorDistinctPhysicalRoots',
     'Resolve-CommMonitorAuthorizedUser',
+    'ConvertTo-CommMonitorCanonicalProfileUserSid',
     'Assert-CommMonitorLegacyDataRootMarker',
     'New-CommMonitorDataRootAdoptionEvidence',
     'ConvertTo-CommMonitorCanonicalJson',

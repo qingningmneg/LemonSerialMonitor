@@ -110,17 +110,17 @@ if ($null -eq $certificate) {
 $privateKey = [Security.Cryptography.X509Certificates.RSACertificateExtensions]::GetRSAPrivateKey(
     $certificate)
 if ($null -eq $privateKey) {
-    throw 'The selected CommMonitor signing certificate has no accessible RSA private key.'
+    throw 'The selected Lemon serial monitor signing certificate has no accessible RSA private key.'
 }
 try {
     if ($privateKey -is [Security.Cryptography.RSACng] -and
         $privateKey.Key.ExportPolicy -ne
             [Security.Cryptography.CngExportPolicies]::None) {
-        throw 'The selected CommMonitor signing certificate has an exportable private key.'
+        throw 'The selected Lemon serial monitor signing certificate has an exportable private key.'
     }
     if ($privateKey -is [Security.Cryptography.RSACryptoServiceProvider] -and
         $privateKey.CspKeyContainerInfo.Exportable) {
-        throw 'The selected CommMonitor signing certificate has an exportable private key.'
+        throw 'The selected Lemon serial monitor signing certificate has an exportable private key.'
     }
 }
 finally {

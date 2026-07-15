@@ -185,7 +185,8 @@ public sealed class PipeServer : BackgroundService
         ArgumentException.ThrowIfNullOrWhiteSpace(pipeName);
         if (!OperatingSystem.IsWindows())
         {
-            throw new PlatformNotSupportedException("The CommMonitor named-pipe server requires Windows.");
+            throw new PlatformNotSupportedException(
+                "The Lemon serial monitor named-pipe server requires Windows.");
         }
 
         return NamedPipeServerStreamAcl.Create(

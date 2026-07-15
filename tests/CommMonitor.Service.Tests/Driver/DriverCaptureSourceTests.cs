@@ -185,6 +185,24 @@ public sealed class DriverCaptureSourceTests
     }
 
     [Fact]
+    public async Task Ready_status_uses_the_public_product_name()
+    {
+        var device = new ScriptedDriverDevice((code, _, output, _) =>
+        {
+            Assert.Equal(DriverProtocol.GetVersionIoControlCode, code);
+            return ValueTask.FromResult(WriteVersion(output));
+        });
+        await using var source = CreateSource(device);
+
+        CaptureSourceStatus status = await source.GetStatusAsync(CancellationToken.None);
+
+        Assert.Equal(CaptureSourceStatusKind.Ready, status.Kind);
+        Assert.Equal(
+            $"Lemon serial monitor driver protocol {DriverProtocol.Version} is ready.",
+            status.Message);
+    }
+
+    [Fact]
     public async Task Missing_control_device_maps_to_DriverUnavailable_status()
     {
         await using var source = new DriverCaptureSource(

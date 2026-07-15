@@ -34,6 +34,7 @@ function New-EmptyLemonResidualObservation {
         DataRootPresent = $false
         InstallerNonAuthorityPresent = $false
         AiRootPresent = $false
+        AiParentPresent = $false
         StartMenuShortcutPresent = $false
         DesktopShortcutPresent = $false
         UninstallEntryPresent = $false
@@ -74,6 +75,18 @@ Describe 'Lemon exact residual assessment' {
             Should Be 'user-service|upper-filter|app-root|control-pipe|coexistence-baseline'
         @($assessment.ResidualObjectIds) -contains 'VendorA' | Should Be $false
         @($assessment.ResidualObjectIds) -contains 'VendorB' | Should Be $false
+    }
+
+    It 'reports the owned AI namespace parent as an exact residual' {
+        $observation = New-EmptyLemonResidualObservation
+        $observation.AiParentPresent = $true
+
+        $assessment = Get-LemonResidualAssessment `
+            -Observation $observation `
+            -AllowedPendingObjectIds @()
+
+        $assessment.Status | Should Be 'Failed'
+        (@($assessment.ResidualObjectIds) -join '|') | Should Be 'ai-parent'
     }
 
     It 'reports PendingReboot only when every exact residual has authenticated pending authority' {

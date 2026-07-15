@@ -27,7 +27,7 @@ internal sealed class DriverCaptureSource :
         new Dictionary<ulong, string>();
     private CaptureSourceStatus _status = new(
         CaptureSourceStatusKind.DriverUnavailable,
-        "The CommMonitor driver has not been checked yet.");
+        "The Lemon serial monitor driver has not been checked yet.");
     private volatile bool _disposed;
 
     public DriverCaptureSource(
@@ -370,7 +370,7 @@ internal sealed class DriverCaptureSource :
             _device = candidate;
             SetStatus(
                 CaptureSourceStatusKind.Ready,
-                $"CommMonitor driver protocol {DriverProtocol.Version} is ready.");
+                $"Lemon serial monitor driver protocol {DriverProtocol.Version} is ready.");
             return candidate;
         }
         finally

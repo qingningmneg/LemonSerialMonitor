@@ -25,6 +25,8 @@ $AppRoot = $null
 $CoreRoot = Join-Path $env:ProgramFiles 'CommMonitor'
 $DataRoot = Join-Path $env:ProgramData 'CommMonitor'
 $AiStateRoot = $null
+$AiStateParent = $null
+$authorizedUserSid = $null
 
 function Write-LemonUninstallResult {
     param(
@@ -214,9 +216,6 @@ function Remove-LemonProtectedTree {
     catch [IO.IOException] {
         return $false
     }
-    catch [UnauthorizedAccessException] {
-        return $false
-    }
 }
 
 function ConvertTo-LemonPathBase64 {
@@ -321,6 +320,8 @@ function Get-LemonResidualObservation {
                     'state\migration-attempt.v1.json'))
         AiRootPresent = -not [string]::IsNullOrWhiteSpace($AiStateRoot) -and
             (Test-Path -LiteralPath $AiStateRoot)
+        AiParentPresent = -not [string]::IsNullOrWhiteSpace($AiStateParent) -and
+            (Test-Path -LiteralPath $AiStateParent)
         StartMenuShortcutPresent = $shortcutPresent
         DesktopShortcutPresent = $false
         UninstallEntryPresent = $false
@@ -368,6 +369,8 @@ try {
             [StringComparison]::Ordinal)) {
         throw 'The protected installation state identity is invalid.'
     }
+    $authorizedUserSid = ConvertTo-CommMonitorCanonicalProfileUserSid `
+        -Sid $state.AuthorizedUserSid
 
     $AppRoot = ConvertTo-LemonCanonicalLocalPath `
         -Path ([string]$state.Roots.AppRoot) `
@@ -384,6 +387,19 @@ try {
     $AiStateRoot = ConvertTo-LemonCanonicalLocalPath `
         -Path ([string]$state.Roots.AiStateRoot) `
         -Role AiStateRoot
+    $aiStateDirectory = [IO.DirectoryInfo]::new($AiStateRoot)
+    if (-not [string]::Equals(
+            $aiStateDirectory.Name,
+            'AI',
+            [StringComparison]::OrdinalIgnoreCase) -or
+        $null -eq $aiStateDirectory.Parent -or
+        -not [string]::Equals(
+            $aiStateDirectory.Parent.Name,
+            'LemonSerialMonitor',
+            [StringComparison]::OrdinalIgnoreCase)) {
+        throw 'The protected AI state root does not match the product namespace layout.'
+    }
+    $AiStateParent = $aiStateDirectory.Parent.FullName
     foreach ($pair in @(
             @($CoreRoot, (Join-Path $env:ProgramFiles 'CommMonitor')),
             @($DataRoot, (Join-Path $env:ProgramData 'CommMonitor')),
@@ -483,7 +499,9 @@ try {
     if (-not (Test-Path -LiteralPath $helperPath -PathType Leaf)) {
         throw 'The protected native uninstall helper is missing.'
     }
-    $pendingReboot = $false
+    $rebootRequired = $false
+    $pendingAuthorityIds = [Collections.Generic.HashSet[string]]::new(
+        [StringComparer]::Ordinal)
 
     if (-not $Resume) {
         Stop-LemonOwnedProcesses -ExpectedImagePaths @(
@@ -524,8 +542,10 @@ try {
                     '/force') `
                 -SuccessExitCodes @(0, 3010) `
                 -RebootExitCodes @(3010)
-            $pendingReboot = $pendingReboot -or
-                $driverResult.Status -eq 'PendingReboot'
+            if ($driverResult.Status -eq 'PendingReboot') {
+                $rebootRequired = $true
+                [void]$pendingAuthorityIds.Add('driver-package')
+            }
         }
         if ($null -ne (Get-Service -Name $kernelServiceName -ErrorAction SilentlyContinue)) {
             Invoke-LemonCheckedNativeCommand `
@@ -550,7 +570,7 @@ try {
                 -FilePath (Join-Path $env:SystemRoot 'System32\bcdedit.exe') `
                 -ArgumentList @('/set', 'testsigning', 'off') `
                 -SuccessExitCodes @(0) | Out-Null
-            $pendingReboot = $true
+            $rebootRequired = $true
         }
 
         if ($null -ne $state.Shortcut) {
@@ -598,19 +618,39 @@ try {
                 '--result', $helperResultPath) `
             -SuccessExitCodes @(0, 3010) `
             -RebootExitCodes @(3010)
-        $pendingReboot = $pendingReboot -or
-            $helperResult.Status -eq 'PendingReboot'
+        if ($helperResult.Status -eq 'PendingReboot') {
+            $rebootRequired = $true
+            [void]$pendingAuthorityIds.Add('app-root')
+            [void]$pendingAuthorityIds.Add('ai-root')
+        }
+    }
+
+    $aiParentCleanup = Invoke-LemonEmptyDirectoryCleanup `
+        -Path $AiStateParent `
+        -TrustValidator {
+            param($path)
+            [void](Assert-CommMonitorNoReparsePoint -Path $path)
+            Assert-CommMonitorTrustedDirectory `
+                -Path $path `
+                -AdditionalTrustedSids @($authorizedUserSid)
+        }
+    if ($aiParentCleanup -eq 'PendingReboot') {
+        $rebootRequired = $true
+        [void]$pendingAuthorityIds.Add('ai-parent')
     }
 
     if (-not (Remove-LemonProtectedTree -Path $CoreRoot)) {
-        $pendingReboot = $true
+        $rebootRequired = $true
+        [void]$pendingAuthorityIds.Add('core-root')
     }
     if (-not (Remove-LemonProtectedTree -Path $DataRoot)) {
-        $pendingReboot = $true
+        $rebootRequired = $true
+        [void]$pendingAuthorityIds.Add('data-root')
     }
     if (-not (Remove-LemonProtectedTree -Path (Join-Path $InstallerRoot `
                 'state\migration-backup'))) {
-        $pendingReboot = $true
+        $rebootRequired = $true
+        [void]$pendingAuthorityIds.Add('installer-non-authority')
     }
     $migrationAttemptPath = Join-Path $InstallerRoot `
         'state\migration-attempt.v1.json'
@@ -619,27 +659,34 @@ try {
     }
 
     $observation = Get-LemonResidualObservation -State $state
+    if ($observation.UserServicePresent) {
+        [void]$pendingAuthorityIds.Add('user-service')
+        [void]$pendingAuthorityIds.Add('control-pipe')
+        [void]$pendingAuthorityIds.Add('ai-pipe')
+    }
+    if ($observation.KernelServicePresent) {
+        [void]$pendingAuthorityIds.Add('kernel-service')
+    }
     $firstAssessment = Get-LemonResidualAssessment `
         -Observation $observation `
         -AllowedPendingObjectIds @()
-    $assessment = $firstAssessment
-    if (@($firstAssessment.ResidualObjectIds).Count -gt 0 -and
-        ($pendingReboot -or
-            $observation.UserServicePresent -or
-            $observation.KernelServicePresent)) {
-        $unsafeResiduals = @($firstAssessment.ResidualObjectIds | Where-Object {
-                $_ -in @(
-                    'root-certificate',
-                    'publisher-certificate',
-                    'start-menu-shortcut',
-                    'desktop-shortcut',
-                    'coexistence-baseline')
-            })
-        if ($unsafeResiduals.Count -eq 0) {
-            $assessment = Get-LemonResidualAssessment `
-                -Observation $observation `
-                -AllowedPendingObjectIds ([string[]]$firstAssessment.ResidualObjectIds)
+    $currentPendingAuthorityIds = [string[]]@(
+        $firstAssessment.ResidualObjectIds | Where-Object {
+            $pendingAuthorityIds.Contains([string]$_)
+        })
+    $assessment = if (
+        @($firstAssessment.ResidualObjectIds).Count -eq 0 -and
+        $rebootRequired) {
+        [pscustomobject][ordered]@{
+            Status = 'PendingReboot'
+            ResidualObjectIds = [string[]]@()
+            PendingObjectIds = [string[]]@()
         }
+    }
+    else {
+        Get-LemonResidualAssessment `
+            -Observation $observation `
+            -AllowedPendingObjectIds $currentPendingAuthorityIds
     }
 
     switch ([string]$assessment.Status) {
@@ -652,9 +699,9 @@ try {
             exit 0
         }
         'PendingReboot' {
-            Write-LemonUninstallResult `
-                -Status PendingReboot `
-                -Message 'Verified components remain locked; cleanup will resume after restart.' `
+                Write-LemonUninstallResult `
+                    -Status PendingReboot `
+                    -Message 'A verified cleanup transition requires restart; cleanup will resume after restart.' `
                 -ResidualObjectIds ([string[]]$assessment.ResidualObjectIds) `
                 -FailureType $null
             exit 3010

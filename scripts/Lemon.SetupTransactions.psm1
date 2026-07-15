@@ -284,7 +284,10 @@ function Test-LemonUpperFiltersRemoval {
     $expected = [string[]](Get-LemonUpperFiltersAfterUninstall `
             -Values $Before `
             -Entry $Entry)
-    $actual = [string[]]@($After)
+    [string[]] $actual = @()
+    if ($null -ne $After) {
+        $actual = [string[]]@($After)
+    }
     if ($expected.Count -ne $actual.Count) {
         return $false
     }
@@ -297,6 +300,67 @@ function Test-LemonUpperFiltersRemoval {
         }
     }
     return $true
+}
+
+function Invoke-LemonEmptyDirectoryCleanup {
+    [CmdletBinding()]
+    [OutputType([string])]
+    param(
+        [Parameter(Mandatory)][ValidateNotNullOrEmpty()][string] $Path,
+        [Parameter(Mandatory)][scriptblock] $TrustValidator,
+        [scriptblock] $DeleteAction = {
+            param($candidate)
+            [IO.Directory]::Delete([string]$candidate, $false)
+        }
+    )
+
+    $fullPath = [IO.Path]::GetFullPath($Path)
+    if (-not (Test-Path -LiteralPath $fullPath)) {
+        return 'Absent'
+    }
+    $item = Get-Item -LiteralPath $fullPath -Force -ErrorAction Stop
+    if (-not [bool]$item.PSIsContainer) {
+        throw "Expected an owned directory: '$fullPath'."
+    }
+    if (($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+        throw "Refusing a reparse-point directory: '$fullPath'."
+    }
+    [void](& $TrustValidator $fullPath)
+    if (@(Get-ChildItem -LiteralPath $fullPath -Force -ErrorAction Stop).Count -ne 0) {
+        return 'NotEmpty'
+    }
+    try {
+        [void](& $DeleteAction $fullPath)
+    }
+    catch [IO.DirectoryNotFoundException] {
+        return 'Absent'
+    }
+    catch [IO.IOException] {
+        if (-not (Test-Path -LiteralPath $fullPath)) {
+            return 'Absent'
+        }
+        $afterFailure = Get-Item `
+            -LiteralPath $fullPath `
+            -Force `
+            -ErrorAction Stop
+        if (-not [bool]$afterFailure.PSIsContainer -or
+            (($afterFailure.Attributes -band
+                    [IO.FileAttributes]::ReparsePoint) -ne 0)) {
+            throw "Owned directory identity changed during cleanup: '$fullPath'."
+        }
+        [void](& $TrustValidator $fullPath)
+        if (@(Get-ChildItem `
+                    -LiteralPath $fullPath `
+                    -Force `
+                    -ErrorAction Stop).Count -ne 0) {
+            return 'NotEmpty'
+        }
+        return 'PendingReboot'
+    }
+    if (Test-Path -LiteralPath $fullPath) {
+        return 'PendingReboot'
+    }
+    return 'Removed'
 }
 
 function Get-LemonResidualAssessment {
@@ -319,6 +383,7 @@ function Get-LemonResidualAssessment {
         DataRootPresent = 'data-root'
         InstallerNonAuthorityPresent = 'installer-non-authority'
         AiRootPresent = 'ai-root'
+        AiParentPresent = 'ai-parent'
         StartMenuShortcutPresent = 'start-menu-shortcut'
         DesktopShortcutPresent = 'desktop-shortcut'
         UninstallEntryPresent = 'uninstall-entry'
@@ -431,5 +496,6 @@ Export-ModuleMember -Function @(
     'Invoke-LemonMutationTransaction',
     'Get-LemonUpperFiltersAfterUninstall',
     'Test-LemonUpperFiltersRemoval',
+    'Invoke-LemonEmptyDirectoryCleanup',
     'Get-LemonResidualAssessment'
 )

@@ -177,4 +177,121 @@ Describe 'Lemon exact UpperFilters uninstall difference' {
             -After @('VendorA', 'VendorB', 'Injected') `
             -Entry 'CommMonitorFilter' | Should Be $false
     }
+
+    It 'verifies removal when the missing registry value is represented as null' {
+        $before = @('CommMonitorFilter')
+        $after = Get-LemonUpperFiltersAfterUninstall `
+            -Values $before `
+            -Entry 'CommMonitorFilter'
+
+        @($after).Count | Should Be 0
+        Test-LemonUpperFiltersRemoval `
+            -Before $before `
+            -After $null `
+            -Entry 'CommMonitorFilter' | Should Be $true
+    }
+
+    It 'treats an already-missing registry value as an idempotent retry' {
+        Test-LemonUpperFiltersRemoval `
+            -Before $null `
+            -After $null `
+            -Entry 'CommMonitorFilter' | Should Be $true
+    }
+}
+
+Describe 'Lemon empty owned directory cleanup' {
+    It 'removes an empty ordinary directory after validating its identity' {
+        $path = Join-Path $TestDrive 'empty-ai-parent'
+        New-Item -ItemType Directory -Path $path -Force | Out-Null
+        $validated = [Collections.Generic.List[string]]::new()
+
+        $result = Invoke-LemonEmptyDirectoryCleanup `
+            -Path $path `
+            -TrustValidator {
+                param($candidate)
+                $validated.Add([string]$candidate)
+            }
+
+        $result | Should Be 'Removed'
+        $validated.Count | Should Be 1
+        Test-Path -LiteralPath $path | Should Be $false
+    }
+
+    It 'preserves a non-empty directory and reports it as not empty' {
+        $path = Join-Path $TestDrive 'non-empty-ai-parent'
+        New-Item -ItemType Directory -Path $path -Force | Out-Null
+        Set-Content -LiteralPath (Join-Path $path 'unknown.txt') -Value 'keep'
+
+        $result = Invoke-LemonEmptyDirectoryCleanup `
+            -Path $path `
+            -TrustValidator { param($candidate) }
+
+        $result | Should Be 'NotEmpty'
+        Test-Path -LiteralPath (Join-Path $path 'unknown.txt') |
+            Should Be $true
+    }
+
+    It 'treats an already-absent directory as an idempotent success' {
+        $path = Join-Path $TestDrive 'absent-ai-parent'
+
+        Invoke-LemonEmptyDirectoryCleanup `
+            -Path $path `
+            -TrustValidator { param($candidate) } | Should Be 'Absent'
+    }
+
+    It 'reports a locked empty directory as pending reboot' {
+        $path = Join-Path $TestDrive 'locked-empty-ai-parent'
+        New-Item -ItemType Directory -Path $path -Force | Out-Null
+
+        $result = Invoke-LemonEmptyDirectoryCleanup `
+            -Path $path `
+            -TrustValidator { param($candidate) } `
+            -DeleteAction {
+                param($candidate)
+                throw [IO.IOException]::new('directory is locked')
+            }
+
+        $result | Should Be 'PendingReboot'
+        Test-Path -LiteralPath $path | Should Be $true
+    }
+
+    It 'reclassifies a raced non-empty directory instead of granting reboot authority' {
+        $path = Join-Path $TestDrive 'raced-ai-parent'
+        New-Item -ItemType Directory -Path $path -Force | Out-Null
+
+        $result = Invoke-LemonEmptyDirectoryCleanup `
+            -Path $path `
+            -TrustValidator { param($candidate) } `
+            -DeleteAction {
+                param($candidate)
+                Set-Content `
+                    -LiteralPath (Join-Path $candidate 'unknown.txt') `
+                    -Value 'keep'
+                throw [IO.IOException]::new('directory changed')
+            }
+
+        $result | Should Be 'NotEmpty'
+        Test-Path -LiteralPath (Join-Path $path 'unknown.txt') |
+            Should Be $true
+    }
+
+    It 'does not claim that an access denial will be fixed by reboot' {
+        $path = Join-Path $TestDrive 'denied-ai-parent'
+        New-Item -ItemType Directory -Path $path -Force | Out-Null
+
+        try {
+            Invoke-LemonEmptyDirectoryCleanup `
+                -Path $path `
+                -TrustValidator { param($candidate) } `
+                -DeleteAction {
+                    param($candidate)
+                    throw [UnauthorizedAccessException]::new('access denied')
+                } | Out-Null
+        }
+        catch {
+            $_.Exception.Message | Should Match 'access denied'
+            return
+        }
+        throw 'Expected access denial to fail the cleanup.'
+    }
 }

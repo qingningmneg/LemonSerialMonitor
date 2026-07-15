@@ -74,6 +74,12 @@ Source: "{#PayloadRoot}\scripts\*"; DestDir: "{commonappdata}\LemonSerialMonitor
 [Dirs]
 Name: "{commonappdata}\LemonSerialMonitor\Installer\state\results"; Flags: uninsalwaysuninstall
 
+[UninstallDelete]
+Type: dirifempty; Name: "{commonappdata}\LemonSerialMonitor\Installer\bin"
+Type: dirifempty; Name: "{commonappdata}\LemonSerialMonitor\Installer\scripts"
+Type: dirifempty; Name: "{commonappdata}\LemonSerialMonitor\Installer"
+Type: dirifempty; Name: "{commonappdata}\LemonSerialMonitor"
+
 [Icons]
 Name: "{commondesktop}\Lemon串口监控"; Filename: "{app}\app\Lemon.SerialMonitor.exe"; WorkingDir: "{app}\app"; Tasks: desktopicon; Check: ShouldCreateDesktopIcon
 Name: "{commonprograms}\Lemon串口监控 完整操作手册"; Filename: "{app}\manual\Lemon串口监控-完整操作手册.pdf"; WorkingDir: "{app}\manual"; Check: ShouldCreateManualShortcut
@@ -81,6 +87,7 @@ Name: "{commonprograms}\Lemon串口监控 完整操作手册"; Filename: "{app}\
 [Code]
 const
   InstallerRoot = '{commonappdata}\LemonSerialMonitor\Installer';
+  TaskEnumHidden = 1;
 
 var
   PayloadExtracted: Boolean;
@@ -466,6 +473,46 @@ begin
     Log('Continuation task delete returned ' + IntToStr(ResultCode));
 end;
 
+function DeleteEmptyUninstallTaskFolder: Boolean;
+var
+  TaskService: Variant;
+  RootFolder: Variant;
+  RootFolders: Variant;
+  ProductFolder: Variant;
+  FolderTasks: Variant;
+  FolderChildren: Variant;
+  Index: Integer;
+begin
+  Result := False;
+  try
+    TaskService := CreateOleObject('Schedule.Service');
+    TaskService.Connect;
+    RootFolder := TaskService.GetFolder('\');
+    RootFolders := RootFolder.GetFolders(0);
+    for Index := 1 to RootFolders.Count do
+    begin
+      ProductFolder := RootFolders.Item(Index);
+      if CompareText(ProductFolder.Name, 'LemonSerialMonitor') = 0 then
+      begin
+        FolderTasks := ProductFolder.GetTasks(TaskEnumHidden);
+        FolderChildren := ProductFolder.GetFolders(0);
+        if (FolderTasks.Count = 0) and (FolderChildren.Count = 0) then
+        begin
+          RootFolder.DeleteFolder('LemonSerialMonitor', 0);
+          Result := True;
+        end
+        else
+          Log('The uninstall task folder is not empty and was preserved.');
+        Exit;
+      end;
+    end;
+    Result := True;
+  except
+    Log('Unable to verify the empty uninstall task folder: ' +
+      GetExceptionMessage);
+  end;
+end;
+
 function InitializeUninstall: Boolean;
 var
   ResumeId: String;
@@ -553,6 +600,9 @@ begin
     RaiseException('卸载完成状态与结果文件不一致。');
 
   DeleteUninstallContinuation;
+  if not DeleteEmptyUninstallTaskFolder then
+    RaiseException(
+      'Unable to remove the empty uninstall continuation task folder safely.');
   DeleteFinalProtectedState(ResultPath);
 end;
 

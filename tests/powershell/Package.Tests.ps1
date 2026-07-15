@@ -21,7 +21,8 @@ foreach ($functionName in @(
         'Assert-NoReparsePointInDirectoryTree',
         'Remove-VerifiedDirectoryTree',
         'Reset-LemonAppPublishOutput',
-        'Assert-LemonAppPublishOutput')) {
+        'Assert-LemonAppPublishOutput',
+        'Assert-LemonPublishedMetadata')) {
     if ($buildFunctionAsts.ContainsKey($functionName)) {
         . ([scriptblock]::Create(
                 $buildFunctionAsts[$functionName].Extent.Text))
@@ -414,6 +415,34 @@ Describe 'Lemon desktop publish identity' {
             -Value 'debug'
         { Assert-LemonAppPublishOutput -AppOutput $appOutput } |
             Should Throw
+    }
+
+    It 'verifies real published metadata before creating the package manifest' {
+        $buildFunctionAsts.ContainsKey('Assert-LemonPublishedMetadata') |
+            Should Be $true
+        if (-not $buildFunctionAsts.ContainsKey(
+                'Assert-LemonPublishedMetadata')) {
+            return
+        }
+
+        $metadataFunctionText =
+            $buildFunctionAsts['Assert-LemonPublishedMetadata'].Extent.Text
+        $metadataFunctionText.Contains(
+            '[Diagnostics.FileVersionInfo]::GetVersionInfo') |
+            Should Be $true
+        $metadataCalls = [Text.RegularExpressions.Regex]::Matches(
+            $buildText,
+            '(?m)^\s+Assert-LemonPublishedMetadata\s+`')
+        $metadataCalls.Count | Should Be 6
+
+        $firstMetadataCall = $buildText.IndexOf(
+            'Assert-LemonPublishedMetadata `',
+            [StringComparison]::Ordinal)
+        $manifestIndex = $buildText.IndexOf(
+            '$manifestLines = Get-ChildItem',
+            [StringComparison]::Ordinal)
+        ($firstMetadataCall -ge 0) | Should Be $true
+        ($manifestIndex -gt $firstMetadataCall) | Should Be $true
     }
 
     It 'resets and validates the desktop payload around publish and manifest creation' {

@@ -31,10 +31,51 @@ Describe 'Lemon visible Windows metadata' {
         'src\CommMonitor.Driver\CommMonitor.Driver.inx'
     $serviceProgramPath = Join-Path $repoRoot `
         'src\CommMonitor.Service\Program.cs'
+    $serviceProjectPath = Join-Path $repoRoot `
+        'src\CommMonitor.Service\CommMonitor.Service.csproj'
+    $coreProjectPath = Join-Path $repoRoot `
+        'src\CommMonitor.Core\CommMonitor.Core.csproj'
+    $appProjectPath = Join-Path $repoRoot `
+        'src\CommMonitor.App\CommMonitor.App.csproj'
+    $aiProjectPath = Join-Path $repoRoot `
+        'src\Lemon.SerialMonitor.AI\Lemon.SerialMonitor.AI.csproj'
+    $helperProjectPath = Join-Path $repoRoot `
+        'src\Lemon.UninstallHelper\Lemon.UninstallHelper.csproj'
 
-    $signingText = Get-Content -Raw -LiteralPath $signingPath
-    $driverInfText = Get-Content -Raw -LiteralPath $driverInfPath
-    $serviceProgramText = Get-Content -Raw -LiteralPath $serviceProgramPath
+    $signingText = Get-Content -Raw -LiteralPath $signingPath -Encoding UTF8
+    $driverInfText = Get-Content -Raw -LiteralPath $driverInfPath -Encoding UTF8
+    $serviceProgramText = Get-Content -Raw -LiteralPath $serviceProgramPath -Encoding UTF8
+    $serviceProjectText = Get-Content -Raw -LiteralPath $serviceProjectPath -Encoding UTF8
+    $coreProjectText = Get-Content -Raw -LiteralPath $coreProjectPath -Encoding UTF8
+    $appProjectText = Get-Content -Raw -LiteralPath $appProjectPath -Encoding UTF8
+    $aiProjectText = Get-Content -Raw -LiteralPath $aiProjectPath -Encoding UTF8
+    $helperProjectText = Get-Content -Raw -LiteralPath $helperProjectPath -Encoding UTF8
+    $publicProductName = 'Lemon' + (-join @(
+            [char]0x4E32,
+            [char]0x53E3,
+            [char]0x76D1,
+            [char]0x63A7))
+    $serviceProductName = $publicProductName + (-join @(
+            [char]0x670D,
+            [char]0x52A1))
+    $serviceDescription = $publicProductName + (-join @(
+            [char]0x540E,
+            [char]0x53F0,
+            [char]0x670D,
+            [char]0x52A1))
+    $coreTitle = $publicProductName + (-join @(
+            [char]0x6838,
+            [char]0x5FC3,
+            [char]0x7EC4,
+            [char]0x4EF6))
+    $aiTitle = $publicProductName + ' AI ' + (-join @(
+            [char]0x63A5,
+            [char]0x53E3))
+    $helperTitle = $publicProductName + (-join @(
+            [char]0x5378,
+            [char]0x8F7D,
+            [char]0x7EC4,
+            [char]0x4EF6))
 
     It 'uses the Lemon name in the certificate confirmation dialog' {
         $signingText.Contains(
@@ -57,6 +98,42 @@ Describe 'Lemon visible Windows metadata' {
     It 'uses the Lemon name for the Windows service host' {
         $serviceProgramText.Contains(
             'options.ServiceName = "Lemon Serial Monitor Capture Service";') |
+            Should Be $true
+    }
+
+    It 'uses Lemon product metadata for the service executable' {
+        $serviceProjectText.Contains("<Product>$serviceProductName</Product>") |
+            Should Be $true
+        $serviceProjectText.Contains("<Title>$serviceProductName</Title>") |
+            Should Be $true
+        $serviceProjectText.Contains('<Company>Lemon Serial Monitor</Company>') |
+            Should Be $true
+        $serviceProjectText.Contains("<Description>$serviceDescription</Description>") |
+            Should Be $true
+    }
+
+    It 'uses Lemon product metadata for every managed Windows component' {
+        $coreProjectText.Contains("<Product>$publicProductName</Product>") |
+            Should Be $true
+        $coreProjectText.Contains("<AssemblyTitle>$coreTitle</AssemblyTitle>") |
+            Should Be $true
+        $coreProjectText.Contains('<Company>Lemon Serial Monitor</Company>') |
+            Should Be $true
+        $appProjectText.Contains('<Company>Lemon Serial Monitor</Company>') |
+            Should Be $true
+        $aiProjectText.Contains("<AssemblyTitle>$aiTitle</AssemblyTitle>") |
+            Should Be $true
+        $aiProjectText.Contains('<Company>Lemon Serial Monitor</Company>') |
+            Should Be $true
+        $aiProjectText.Contains('<FileVersion>0.1.0.0</FileVersion>') |
+            Should Be $true
+        $helperProjectText.Contains("<Product>$helperTitle</Product>") |
+            Should Be $true
+        $helperProjectText.Contains("<AssemblyTitle>$helperTitle</AssemblyTitle>") |
+            Should Be $true
+        $helperProjectText.Contains('<Company>Lemon Serial Monitor</Company>') |
+            Should Be $true
+        $helperProjectText.Contains('<FileVersion>0.1.0.0</FileVersion>') |
             Should Be $true
     }
 }

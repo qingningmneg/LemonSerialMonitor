@@ -135,6 +135,61 @@ Describe 'Lemon graphical installer contract' {
         }
     }
 
+    It 'removes only empty protected installer directories after final uninstall' {
+        $text = Get-Content -Raw -LiteralPath $innoPath -Encoding UTF8
+        $expected = @(
+                'Type: dirifempty; Name: "{commonappdata}\LemonSerialMonitor\Installer\bin"',
+                'Type: dirifempty; Name: "{commonappdata}\LemonSerialMonitor\Installer\scripts"',
+                'Type: dirifempty; Name: "{commonappdata}\LemonSerialMonitor\Installer"',
+                'Type: dirifempty; Name: "{commonappdata}\LemonSerialMonitor"')
+        $match = [regex]::Match(
+            $text,
+            '(?ms)^\[UninstallDelete\]\s*\r?\n(?<body>.*?)(?=^\[[^\r\n]+\]|\z)')
+        $match.Success | Should Be $true
+        if (-not $match.Success) {
+            return
+        }
+        $actual = @(
+            $match.Groups['body'].Value -split '\r?\n' |
+                Where-Object {
+                    $_.Trim() -ne '' -and
+                    -not $_.TrimStart().StartsWith(';')
+                } |
+                ForEach-Object { $_.Trim() })
+        $actual.Count | Should Be $expected.Count
+        for ($index = 0; $index -lt $expected.Count; $index++) {
+            $actual[$index] | Should Be $expected[$index]
+        }
+        $match.Groups['body'].Value |
+            Should Not Match '(?i)\b(files|filesandordirs)\b|[*?]'
+    }
+
+    It 'deletes the empty Task Scheduler folder only after deleting its task' {
+        $text = Get-Content -Raw -LiteralPath $innoPath -Encoding UTF8
+        foreach ($required in @(
+                'CreateOleObject(''Schedule.Service'')',
+                'TaskEnumHidden = 1;',
+                'GetFolder(''\'')',
+                'RootFolder.GetFolders(0)',
+                'RootFolders.Item(Index)',
+                'CompareText(ProductFolder.Name, ''LemonSerialMonitor'')',
+                'FolderTasks := ProductFolder.GetTasks(TaskEnumHidden)',
+                'FolderChildren := ProductFolder.GetFolders(0)',
+                'FolderTasks.Count = 0',
+                'FolderChildren.Count = 0',
+                'DeleteFolder(''LemonSerialMonitor'', 0)')) {
+            $text.Contains($required) | Should Be $true
+        }
+        $deleteTask = $text.IndexOf(
+            '  DeleteUninstallContinuation;',
+            [StringComparison]::Ordinal)
+        $deleteFolder = $text.IndexOf(
+            '  if not DeleteEmptyUninstallTaskFolder then',
+            [StringComparison]::Ordinal)
+        $deleteTask | Should BeGreaterThan -1
+        $deleteFolder | Should BeGreaterThan $deleteTask
+    }
+
     It 'surfaces the protected install transaction failure message' {
         $text = Get-Content -Raw -LiteralPath $innoPath -Encoding UTF8
         $functionMatch = [regex]::Match(

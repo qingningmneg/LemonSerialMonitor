@@ -258,6 +258,41 @@ function Assert-LemonAppPublishOutput {
     }
 }
 
+function Assert-LemonPublishedMetadata {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string] $FilePath,
+        [Parameter(Mandatory)][string] $ProductName,
+        [Parameter(Mandatory)][string] $FileDescription,
+        [Parameter(Mandatory)][string] $CompanyName,
+        [string] $FileVersion = '0.1.0.0',
+        [string] $ProductVersion = '0.1.0'
+    )
+
+    $normalizedPath = [IO.Path]::GetFullPath($FilePath)
+    if (-not (Test-Path -LiteralPath $normalizedPath -PathType Leaf)) {
+        throw "Published metadata target was not found: '$normalizedPath'."
+    }
+
+    $versionInfo = [Diagnostics.FileVersionInfo]::GetVersionInfo(
+        $normalizedPath)
+    $expected = [ordered]@{
+        ProductName = $ProductName
+        FileDescription = $FileDescription
+        CompanyName = $CompanyName
+        FileVersion = $FileVersion
+        ProductVersion = $ProductVersion
+    }
+    foreach ($propertyName in $expected.Keys) {
+        $actualValue = [string]$versionInfo.$propertyName
+        $expectedValue = [string]$expected[$propertyName]
+        if ($actualValue -cne $expectedValue) {
+            throw "Published metadata mismatch for '$normalizedPath' " +
+                "($propertyName): expected '$expectedValue', got '$actualValue'."
+        }
+    }
+}
+
 if (-not $phaseRoot.StartsWith(
         $artifactsRoot.TrimEnd('\') + '\',
         [StringComparison]::OrdinalIgnoreCase)) {
@@ -351,6 +386,39 @@ try {
         '-p:DebugSymbols=false',
         '--nologo',
         '--output', $helperOutput)
+
+    $publicProductName = 'Lemon串口监控'
+    $companyName = 'Lemon Serial Monitor'
+    Assert-LemonPublishedMetadata `
+        -FilePath (Join-Path $appOutput 'Lemon.SerialMonitor.exe') `
+        -ProductName $publicProductName `
+        -FileDescription $publicProductName `
+        -CompanyName $companyName
+    Assert-LemonPublishedMetadata `
+        -FilePath (Join-Path $appOutput 'CommMonitor.Core.dll') `
+        -ProductName $publicProductName `
+        -FileDescription ($publicProductName + '核心组件') `
+        -CompanyName $companyName
+    Assert-LemonPublishedMetadata `
+        -FilePath (Join-Path $serviceOutput 'CommMonitor.Service.exe') `
+        -ProductName ($publicProductName + '服务') `
+        -FileDescription ($publicProductName + '服务') `
+        -CompanyName $companyName
+    Assert-LemonPublishedMetadata `
+        -FilePath (Join-Path $serviceOutput 'CommMonitor.Core.dll') `
+        -ProductName $publicProductName `
+        -FileDescription ($publicProductName + '核心组件') `
+        -CompanyName $companyName
+    Assert-LemonPublishedMetadata `
+        -FilePath (Join-Path $aiOutput 'Lemon.SerialMonitor.AI.exe') `
+        -ProductName ($publicProductName + ' AI 接口') `
+        -FileDescription ($publicProductName + ' AI 接口') `
+        -CompanyName $companyName
+    Assert-LemonPublishedMetadata `
+        -FilePath (Join-Path $helperOutput 'Lemon.UninstallHelper.exe') `
+        -ProductName ($publicProductName + '卸载组件') `
+        -FileDescription ($publicProductName + '卸载组件') `
+        -CompanyName $companyName
 
     & (Join-Path $PSScriptRoot 'Build-Driver.ps1') `
         -Configuration $Configuration `

@@ -103,7 +103,7 @@ Server Core 使用 AI 命令行或 MCP 接口操作，见 [AI 接入指南](AI_I
 
 ```powershell
 powershell.exe -NoProfile -ExecutionPolicy Bypass `
-  -File "$env:ProgramFiles\CommMonitor\scripts\Get-CommMonitorStatus.ps1"
+  -File "$env:ProgramData\LemonSerialMonitor\Installer\scripts\Get-CommMonitorStatus.ps1"
 ```
 
 状态应重点检查：平台、Secure Boot、TESTSIGNING、测试证书、Ports 类过滤器、驱动服务、后台服务、控制设备和是否需要重启。
@@ -132,11 +132,13 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass `
 6. 允许管理员权限。
 7. 如提示重启，立即重启；重启后卸载程序会自动继续并核验结果。
 
-也可以运行安装目录中的卸载程序：
+管理员排查 Windows 设置入口异常时，也可以在提升权限后运行受保护安装器目录中的卸载程序：
 
 ```text
-<所选安装目录>\unins000.exe
+%ProgramData%\LemonSerialMonitor\Installer\unins000.exe
 ```
+
+普通用户无法直接浏览该受保护目录是正常现象；日常卸载请始终使用上面的 Windows 设置入口。
 
 完整卸载会永久删除：
 

@@ -54,7 +54,7 @@ internal sealed class WindowsDriverDeviceFactory : IDriverDeviceFactory
             handle.Dispose();
             var nativeError = new Win32Exception(openResult.ErrorCode);
             throw new DriverUnavailableException(
-                $"Cannot open the CommMonitor driver control device '{DevicePath}': " +
+                $"Cannot open the Lemon serial monitor driver control device '{DevicePath}': " +
                 nativeError.Message,
                 nativeError);
         }
@@ -70,7 +70,7 @@ internal sealed class WindowsDriverDeviceFactory : IDriverDeviceFactory
         {
             handle.Dispose();
             throw new DriverUnavailableException(
-                $"Cannot bind overlapped I/O for the CommMonitor driver control device " +
+                $"Cannot bind overlapped I/O for the Lemon serial monitor driver control device " +
                 $"'{DevicePath}'.",
                 error);
         }

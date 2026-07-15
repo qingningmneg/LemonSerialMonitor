@@ -1,5 +1,6 @@
 .worktrees/
 .superpowers/
+docs/superpowers/
 .vs/
 **/bin/
 **/obj/

@@ -2,6 +2,16 @@
 
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
+    <AssemblyName>CommMonitor.Service</AssemblyName>
+    <Product>Lemon串口监控服务</Product>
+    <Title>Lemon串口监控服务</Title>
+    <AssemblyTitle>Lemon串口监控服务</AssemblyTitle>
+    <Description>Lemon串口监控后台服务</Description>
+    <Company>Lemon Serial Monitor</Company>
+    <Version>0.1.0</Version>
+    <FileVersion>0.1.0.0</FileVersion>
+    <InformationalVersion>0.1.0</InformationalVersion>
+    <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>

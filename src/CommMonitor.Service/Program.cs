@@ -164,7 +164,7 @@ await host.Services
     .InitializeAsync(CancellationToken.None);
 ILogger logger = host.Services
     .GetRequiredService<ILoggerFactory>()
-    .CreateLogger("CommMonitor.Service.Startup");
+    .CreateLogger("Lemon.SerialMonitor.Service.Startup");
 CaptureSourceStatus sourceStatus = await host.Services
     .GetRequiredService<ICaptureSourceStatusProvider>()
     .GetStatusAsync(CancellationToken.None);

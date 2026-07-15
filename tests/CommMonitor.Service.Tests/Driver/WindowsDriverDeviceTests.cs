@@ -49,6 +49,10 @@ public sealed class WindowsDriverDeviceTests
         DriverUnavailableException error = await Assert.ThrowsAsync<DriverUnavailableException>(
             () => factory.OpenAsync(CancellationToken.None).AsTask());
 
+        Assert.StartsWith(
+            "Cannot open the Lemon serial monitor driver control device",
+            error.Message,
+            StringComparison.Ordinal);
         Assert.Contains("CommMonitorFilter", error.Message, StringComparison.Ordinal);
         Assert.Equal(0, bindingFactory.BindCount);
     }

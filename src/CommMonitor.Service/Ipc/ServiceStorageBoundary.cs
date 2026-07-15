@@ -87,7 +87,7 @@ internal sealed class ServiceStorageBoundary : IDisposable
         if (!OperatingSystem.IsWindows())
         {
             throw new PlatformNotSupportedException(
-                "CommMonitor service storage hardening requires Windows.");
+                "Lemon serial monitor service storage hardening requires Windows.");
         }
 
         return new ServiceStorageBoundary(managedRoot, sessionRoot, exportRoot);

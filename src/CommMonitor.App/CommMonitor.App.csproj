@@ -13,6 +13,7 @@
     <Title>Lemon串口监控</Title>
     <AssemblyTitle>Lemon串口监控</AssemblyTitle>
     <Description>不占用串口的串口通信监控工具</Description>
+    <Company>Lemon Serial Monitor</Company>
     <Version>0.1.0</Version>
     <FileVersion>0.1.0.0</FileVersion>
     <InformationalVersion>0.1.0</InformationalVersion>
