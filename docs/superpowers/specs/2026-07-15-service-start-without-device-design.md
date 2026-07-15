@@ -12,6 +12,7 @@
 - AI 管道和界面控制管道须可用，并能报告驱动暂不可用。
 - 串口设备随后出现时，不需要重启服务或计算机；下一次状态检查或捕获操作须重新尝试驱动初始化。
 - 无法确认内核捕获状态时不得开始新的捕获，不得把未知状态当成已停止。
+- 界面的 Start、Pause、Resume、Stop 必须经过 `CaptureAuthority`，不得绕过启动协调、捕获所有权和 AI 租约冲突检查。
 - 仅 `DRIVER_UNAVAILABLE` 可降级继续启动；取消、存储损坏、配置错误和其他异常必须继续阻止服务启动。
 
 ## 方案比较
@@ -40,6 +41,10 @@
 6. 后续界面或 AI 发起捕获时，现有 `EnsureStartupReconciledAsync` 因尚未设置 `_startupReconciled` 而再次读取驱动状态：
    - 设备已连接：完成协调并允许捕获；
    - 设备仍未连接：返回 `DRIVER_UNAVAILABLE`，不创建捕获会话。
+7. `PipeServer` 通过一个只描述 WPF 状态变更的内部接口调用 `CaptureAuthority`：
+   - Start、Pause、Resume、Stop 统一经过 Authority 的串行转换门；
+   - ListPorts、Subscribe、Clear 和 Export 保持各自现有只读或已受协调器状态约束的路径；
+   - AI 捕获存在时，WPF Pause/Resume 不得改变 AI 所有的捕获。
 
 ## 错误与日志
 
@@ -55,6 +60,8 @@
 - 启动协调遇到 `DRIVER_UNAVAILABLE` 时完成而不抛出，宿主可继续启动。
 - 第一次驱动不可用后，状态源变为可用，再次执行核心协调能够成功，证明恢复无需重启。
 - 取消或非预期异常仍向上传播。
+- 管道收到 Start、Pause、Resume、Stop 时逐项调用 WPF Authority 接口，而不是直接调用 `CaptureCoordinator`。
+- WPF Pause/Resume 仅能改变 WPF 所有的运行；AI 所有或未知所有权必须被拒绝。
 - 运行全部服务测试、全部托管测试和安装器契约测试。
 
 真实系统验收：
