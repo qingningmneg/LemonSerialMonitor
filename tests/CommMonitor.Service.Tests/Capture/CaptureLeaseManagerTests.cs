@@ -565,6 +565,48 @@ public sealed class CaptureLeaseManagerTests
     }
 
     [Fact]
+    public async Task Wpf_state_changes_run_through_the_capture_authority()
+    {
+        await using var context = new AuthorityContext();
+        await context.Authority.StartWpfAsync(new CaptureSelection(
+            Devices(),
+            Path.Combine(context.Boundary.SessionRoot, "wpf.cmsession")));
+        Assert.Equal(CaptureState.Running, context.Coordinator.State);
+
+        await context.Authority.PauseWpfAsync();
+        Assert.Equal(CaptureState.Paused, context.Coordinator.State);
+        await context.Authority.ResumeWpfAsync();
+        Assert.Equal(CaptureState.Running, context.Coordinator.State);
+        await context.Authority.StopWpfAsync();
+        Assert.Equal(CaptureState.Stopped, context.Coordinator.State);
+    }
+
+    [Fact]
+    public async Task Wpf_pause_and_resume_cannot_mutate_an_ai_owned_capture()
+    {
+        await using var context = new AuthorityContext();
+        ActiveLease active = await context.StartAiAsync(Owner, Now);
+
+        CaptureLeaseException pause = await Assert.ThrowsAsync<CaptureLeaseException>(
+            () => context.Authority.PauseWpfAsync());
+
+        Assert.Equal(AiErrorCodes.CaptureConflict, pause.Code);
+        Assert.Equal(CaptureState.Running, context.Coordinator.State);
+
+        ActiveLease paused = await context.Authority.PauseAiAsync(
+            Owner,
+            active.LeaseId,
+            active.Secret,
+            active.Generation);
+        CaptureLeaseException resume = await Assert.ThrowsAsync<CaptureLeaseException>(
+            () => context.Authority.ResumeWpfAsync());
+
+        Assert.Equal(AiErrorCodes.CaptureConflict, resume.Code);
+        Assert.Equal(CaptureState.Paused, paused.CaptureState);
+        Assert.Equal(CaptureState.Paused, context.Coordinator.State);
+    }
+
+    [Fact]
     public async Task Wpf_capture_conflicts_with_ai_and_ai_cannot_force_stop_it()
     {
         await using var context = new AuthorityContext();

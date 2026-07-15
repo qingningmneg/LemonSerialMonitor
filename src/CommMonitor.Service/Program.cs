@@ -147,6 +147,7 @@ if (!aiOnlyRequested)
 {
     builder.Services.AddSingleton<PipeServer>(services => new PipeServer(
         services.GetRequiredService<CaptureCoordinator>(),
+        services.GetRequiredService<CaptureAuthority>(),
         services.GetRequiredService<IPortCatalog>(),
         services.GetRequiredService<ICaptureSourceStatusProvider>(),
         services.GetRequiredService<ILogger<PipeServer>>(),

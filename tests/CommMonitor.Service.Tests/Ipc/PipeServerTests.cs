@@ -111,6 +111,32 @@ public sealed class PipeServerTests
     }
 
     [Fact]
+    public async Task Mutating_commands_are_routed_through_the_wpf_capture_controller()
+    {
+        await using var host = new TestPipeHost();
+        await host.StartAsync();
+        await using NamedPipeClientStream client = await host.ConnectAsync();
+
+        PipeCommand[] commands =
+        [
+            new PipeCommand("route-start", PipeCommandName.Start, [17], host.SessionPath),
+            new PipeCommand("route-pause", PipeCommandName.Pause),
+            new PipeCommand("route-resume", PipeCommandName.Resume),
+            new PipeCommand("route-stop", PipeCommandName.Stop),
+        ];
+        foreach (PipeCommand command in commands)
+        {
+            await PipeFrameCodec.WriteAsync(client, command);
+            PipeReply reply = await ReadWithTimeoutAsync<PipeReply>(client);
+            Assert.True(reply.Success, reply.Error);
+        }
+
+        Assert.Equal(
+            new[] { "Start", "Pause", "Resume", "Stop" },
+            host.WpfController.Calls);
+    }
+
+    [Fact]
     public async Task Subscriber_receives_immutable_batches_published_by_the_coordinator()
     {
         await using var host = new TestPipeHost();
@@ -352,8 +378,10 @@ public sealed class PipeServerTests
         await using var coordinator = new CaptureCoordinator(
             source,
             new SingleSessionStoreFactory(new NonPersistingSessionStore()));
+        var wpfController = new RecordingWpfCaptureController(coordinator);
         var server = new PipeServer(
             coordinator,
+            wpfController,
             new StaticPortCatalog([]),
             new StaticStatusProvider(new CaptureSourceStatus(
                 CaptureSourceStatusKind.DevelopmentFake,
@@ -543,8 +571,10 @@ public sealed class PipeServerTests
             PipeName = $"CommMonitor.Service.Tests.{Guid.NewGuid():N}";
             Source = new FakeCaptureSource();
             Coordinator = new CaptureCoordinator(Source, new SessionStoreFactory());
+            WpfController = new RecordingWpfCaptureController(Coordinator);
             Server = new PipeServer(
                 Coordinator,
+                WpfController,
                 portCatalog ?? new StaticPortCatalog([]),
                 statusProvider ?? Source,
                 NullLogger<PipeServer>.Instance,
@@ -557,6 +587,7 @@ public sealed class PipeServerTests
         public string ExportRoot => Path.Combine(_sessionRoot, "Exports");
         public FakeCaptureSource Source { get; }
         public CaptureCoordinator Coordinator { get; }
+        public RecordingWpfCaptureController WpfController { get; }
         public PipeServer Server { get; }
 
         public Task StartAsync() => Server.StartAsync(CancellationToken.None);
@@ -583,6 +614,38 @@ public sealed class PipeServerTests
             {
                 File.Delete(path);
             }
+        }
+    }
+
+    private sealed class RecordingWpfCaptureController(CaptureCoordinator coordinator)
+        : IWpfCaptureController
+    {
+        public List<string> Calls { get; } = [];
+
+        public async Task StartWpfAsync(
+            CaptureSelection selection,
+            CancellationToken cancellationToken = default)
+        {
+            Calls.Add("Start");
+            await coordinator.StartAsync(selection, cancellationToken);
+        }
+
+        public async Task PauseWpfAsync(CancellationToken cancellationToken = default)
+        {
+            Calls.Add("Pause");
+            await coordinator.PauseAsync(cancellationToken);
+        }
+
+        public async Task ResumeWpfAsync(CancellationToken cancellationToken = default)
+        {
+            Calls.Add("Resume");
+            await coordinator.ResumeAsync(cancellationToken);
+        }
+
+        public async Task StopWpfAsync(CancellationToken cancellationToken = default)
+        {
+            Calls.Add("Stop");
+            await coordinator.StopAsync(cancellationToken);
         }
     }
 

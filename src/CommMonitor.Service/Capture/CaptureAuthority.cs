@@ -11,7 +11,7 @@ using CommMonitor.Service.Sessions;
 namespace CommMonitor.Service.Capture;
 
 [SupportedOSPlatform("windows")]
-internal sealed class CaptureAuthority
+internal sealed class CaptureAuthority : IWpfCaptureController
 {
     private readonly CaptureCoordinator _coordinator;
     private readonly ICaptureSource _captureSource;
@@ -301,6 +301,18 @@ internal sealed class CaptureAuthority
         }
     }
 
+    public Task PauseWpfAsync(CancellationToken cancellationToken = default) =>
+        ChangeWpfStateAsync(
+            CaptureState.Running,
+            static (coordinator, token) => coordinator.PauseAsync(token),
+            cancellationToken);
+
+    public Task ResumeWpfAsync(CancellationToken cancellationToken = default) =>
+        ChangeWpfStateAsync(
+            CaptureState.Paused,
+            static (coordinator, token) => coordinator.ResumeAsync(token),
+            cancellationToken);
+
     public async Task StopWpfAsync(CancellationToken cancellationToken = default)
     {
         await _transitionGate.WaitAsync(cancellationToken).ConfigureAwait(false);
@@ -444,6 +456,34 @@ internal sealed class CaptureAuthority
 
             await transition(_coordinator, cancellationToken).ConfigureAwait(false);
             return _leases.Describe(_coordinator.State);
+        }
+        finally
+        {
+            _transitionGate.Release();
+        }
+    }
+
+    private async Task ChangeWpfStateAsync(
+        CaptureState expectedState,
+        Func<CaptureCoordinator, CancellationToken, Task> transition,
+        CancellationToken cancellationToken)
+    {
+        await _transitionGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            await EnsureStartupReconciledAsync(cancellationToken).ConfigureAwait(false);
+            if (_owner != CaptureAuthorityOwner.Wpf)
+            {
+                throw Conflict("Capture is not controlled by WPF.");
+            }
+
+            if (_coordinator.State != expectedState)
+            {
+                throw new InvalidOperationException(
+                    $"Capture must be {expectedState} for this transition.");
+            }
+
+            await transition(_coordinator, cancellationToken).ConfigureAwait(false);
         }
         finally
         {

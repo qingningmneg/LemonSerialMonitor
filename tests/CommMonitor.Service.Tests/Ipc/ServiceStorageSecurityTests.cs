@@ -314,10 +314,12 @@ public sealed class ServiceStorageSecurityTests
         string? exportRoot = null)
     {
         var catalog = new EmptyPortCatalog();
+        var wpfController = new CompletedWpfCaptureController();
         string pipeName = $"CommMonitor.Service.Storage.Tests.{Guid.NewGuid():N}";
         return exportRoot is null
             ? new PipeServer(
                 coordinator,
+                wpfController,
                 catalog,
                 source,
                 NullLogger<PipeServer>.Instance,
@@ -325,12 +327,30 @@ public sealed class ServiceStorageSecurityTests
                 sessionRoot)
             : new PipeServer(
                 coordinator,
+                wpfController,
                 catalog,
                 source,
                 NullLogger<PipeServer>.Instance,
                 pipeName,
                 sessionRoot,
                 exportRoot);
+    }
+
+    private sealed class CompletedWpfCaptureController : IWpfCaptureController
+    {
+        public Task StartWpfAsync(
+            CaptureSelection selection,
+            CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
+
+        public Task PauseWpfAsync(CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
+
+        public Task ResumeWpfAsync(CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
+
+        public Task StopWpfAsync(CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
     }
 
     private sealed class EmptyPortCatalog : IPortCatalog

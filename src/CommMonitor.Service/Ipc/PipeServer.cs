@@ -18,6 +18,7 @@ public sealed class PipeServer : BackgroundService
     internal const int OutboundQueueCapacity = 64;
 
     private readonly CaptureCoordinator _coordinator;
+    private readonly IWpfCaptureController _wpfCaptureController;
     private readonly IPortCatalog _portCatalog;
     private readonly ICaptureSourceStatusProvider _captureSourceStatus;
     private readonly ILogger<PipeServer> _logger;
@@ -28,13 +29,15 @@ public sealed class PipeServer : BackgroundService
     private readonly ConcurrentDictionary<long, ClientSession> _sessions = new();
     private long _nextSessionId;
 
-    public PipeServer(
+    internal PipeServer(
         CaptureCoordinator coordinator,
+        IWpfCaptureController wpfCaptureController,
         IPortCatalog portCatalog,
         ICaptureSourceStatusProvider captureSourceStatus,
         ILogger<PipeServer> logger)
         : this(
             coordinator,
+            wpfCaptureController,
             portCatalog,
             captureSourceStatus,
             logger,
@@ -47,6 +50,7 @@ public sealed class PipeServer : BackgroundService
 
     internal PipeServer(
         CaptureCoordinator coordinator,
+        IWpfCaptureController wpfCaptureController,
         IPortCatalog portCatalog,
         ICaptureSourceStatusProvider captureSourceStatus,
         ILogger<PipeServer> logger,
@@ -54,6 +58,7 @@ public sealed class PipeServer : BackgroundService
         string sessionRoot)
         : this(
             coordinator,
+            wpfCaptureController,
             portCatalog,
             captureSourceStatus,
             logger,
@@ -66,6 +71,7 @@ public sealed class PipeServer : BackgroundService
 
     internal PipeServer(
         CaptureCoordinator coordinator,
+        IWpfCaptureController wpfCaptureController,
         IPortCatalog portCatalog,
         ICaptureSourceStatusProvider captureSourceStatus,
         ILogger<PipeServer> logger,
@@ -74,6 +80,7 @@ public sealed class PipeServer : BackgroundService
         string exportRoot)
         : this(
             coordinator,
+            wpfCaptureController,
             portCatalog,
             captureSourceStatus,
             logger,
@@ -86,6 +93,7 @@ public sealed class PipeServer : BackgroundService
 
     private PipeServer(
         CaptureCoordinator coordinator,
+        IWpfCaptureController wpfCaptureController,
         IPortCatalog portCatalog,
         ICaptureSourceStatusProvider captureSourceStatus,
         ILogger<PipeServer> logger,
@@ -95,6 +103,8 @@ public sealed class PipeServer : BackgroundService
         string exportRoot)
     {
         _coordinator = coordinator ?? throw new ArgumentNullException(nameof(coordinator));
+        _wpfCaptureController = wpfCaptureController ??
+            throw new ArgumentNullException(nameof(wpfCaptureController));
         _portCatalog = portCatalog ?? throw new ArgumentNullException(nameof(portCatalog));
         _captureSourceStatus = captureSourceStatus ??
             throw new ArgumentNullException(nameof(captureSourceStatus));
@@ -461,21 +471,24 @@ public sealed class PipeServer : BackgroundService
 
                     string sessionPath = ResolveSessionPath(command.SessionPath!, _sessionRoot);
                     _storageBoundary.VerifySessionPath(sessionPath);
-                    await _coordinator.StartAsync(
+                    await _wpfCaptureController.StartWpfAsync(
                         new CaptureSelection(command.DeviceIds.ToHashSet(), sessionPath),
                         cancellationToken).ConfigureAwait(false);
                     return Success(command, StateResult());
 
                 case PipeCommandName.Pause:
-                    await _coordinator.PauseAsync(cancellationToken).ConfigureAwait(false);
+                    await _wpfCaptureController.PauseWpfAsync(cancellationToken)
+                        .ConfigureAwait(false);
                     return Success(command, StateResult());
 
                 case PipeCommandName.Resume:
-                    await _coordinator.ResumeAsync(cancellationToken).ConfigureAwait(false);
+                    await _wpfCaptureController.ResumeWpfAsync(cancellationToken)
+                        .ConfigureAwait(false);
                     return Success(command, StateResult());
 
                 case PipeCommandName.Stop:
-                    await _coordinator.StopAsync(cancellationToken).ConfigureAwait(false);
+                    await _wpfCaptureController.StopWpfAsync(cancellationToken)
+                        .ConfigureAwait(false);
                     return Success(command, StateResult());
 
                 case PipeCommandName.Clear:
