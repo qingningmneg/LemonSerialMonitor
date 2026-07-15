@@ -74,6 +74,8 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass `
 
 默认会先调用完整载荷构建。已有经过验证的载荷时可以使用 `-SkipPayloadBuild`；只有明确要保留未签名安装器用于调试时才使用 `-SkipSigning`。
 
+默认测试签名构建不请求公共时间戳。只有拥有可用的 RFC 3161 HTTPS 服务并明确需要时，才传入 `-TimestampUrl`；发布记录必须准确说明文件是否真的带时间戳，不能把普通 Authenticode 签名写成带公共时间戳的正式签名。
+
 输出：
 
 ```text
@@ -109,13 +111,26 @@ py -3.12 -m venv .\.venv-docs
   .\scripts\docs\build_commmonitor_manual.py
 ```
 
-把 DOCX 转成 PDF，再渲染全部页面：
+把 DOCX 复制到纯英文临时目录，用独立 LibreOffice 配置转换成 PDF，再渲染全部页面。这样不会与正在运行的 LibreOffice 共用配置，也能避开部分环境对非英文路径的兼容问题：
 
 ```powershell
-& "$env:ProgramFiles\LibreOffice\program\soffice.exe" `
-  --headless --convert-to pdf `
-  --outdir .\artifacts\manual `
-  .\artifacts\manual\Lemon串口监控-完整操作手册.docx
+$manualStage = Join-Path $env:TEMP ("lemon-manual-" + [guid]::NewGuid().ToString("N"))
+$manualInput = Join-Path $manualStage "input"
+$manualOutput = Join-Path $manualStage "output"
+$manualProfile = Join-Path $manualStage "profile"
+New-Item -ItemType Directory -Path $manualInput, $manualOutput, $manualProfile | Out-Null
+Copy-Item .\artifacts\manual\Lemon串口监控-完整操作手册.docx `
+  (Join-Path $manualInput "manual.docx")
+
+$profileUri = [uri]::new($manualProfile).AbsoluteUri
+& "$env:ProgramFiles\LibreOffice\program\soffice.com" `
+  "-env:UserInstallation=$profileUri" `
+  --headless --nologo --nofirststartwizard --norestore `
+  --convert-to pdf --outdir $manualOutput `
+  (Join-Path $manualInput "manual.docx")
+
+Copy-Item (Join-Path $manualOutput "manual.pdf") `
+  .\artifacts\manual\Lemon串口监控-完整操作手册.pdf
 
 & .\.venv-docs\Scripts\python.exe `
   .\scripts\docs\render_pdf_pages.py `
@@ -139,7 +154,7 @@ Invoke-Pester -Path .\tests\powershell -Output Detailed
 - EXE/SYS/CAT 签名器指纹一致
 - 载荷清单没有缺文件、多文件或路径逃逸
 - Git 公开文件不含证书私钥、令牌、用户路径、日志或会话数据
-- Windows 10/11 与 Server 平台矩阵测试
+- Windows 10/11 与已实际执行的 Server 平台/契约测试；Server 托管任务不能替代驱动端到端验收
 - 安装、重启、真实串口监控、AI 读取、完整卸载和残留核验记录
 
 不要把“编译成功”当成“安装包可发布”。内核驱动版本必须有真实系统门禁和可恢复卸载证据。

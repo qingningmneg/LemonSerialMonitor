@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import json
+import shutil
 import zipfile
+from datetime import datetime, timezone
 from pathlib import Path
+from xml.etree import ElementTree as ET
 
 from docx import Document
 from docx.enum.table import WD_ALIGN_VERTICAL, WD_TABLE_ALIGNMENT
@@ -22,6 +25,7 @@ MARGIN = Inches(1)
 HEADER_FOOTER_DISTANCE = Inches(0.492)
 TABLE_WIDTH_DXA = 9360
 TABLE_INDENT_DXA = 120
+EXPECTED_RENDERED_PAGE_COUNT = 15
 
 BLUE = "2E74B5"
 DARK_BLUE = "1F4D78"
@@ -165,7 +169,44 @@ def configure_document(doc: Document) -> None:
     doc.core_properties.title = "Lemon串口监控完整操作手册"
     doc.core_properties.subject = "安装、串口监控、复制、导出、AI 接入与完整卸载"
     doc.core_properties.author = "Lemon串口监控"
+    doc.core_properties.last_modified_by = "Lemon串口监控"
+    doc.core_properties.comments = "Lemon串口监控 0.1.0 完整操作手册"
+    doc.core_properties.created = datetime(2026, 7, 15, tzinfo=timezone.utc)
+    doc.core_properties.modified = datetime(2026, 7, 15, tzinfo=timezone.utc)
+    doc.core_properties.revision = 1
     doc.core_properties.keywords = "串口,监控,Windows,AI,MCP"
+
+
+def normalize_extended_properties(path: Path, page_count: int) -> None:
+    namespace = "http://schemas.openxmlformats.org/officeDocument/2006/extended-properties"
+    ET.register_namespace("", namespace)
+    ET.register_namespace("vt", "http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes")
+
+    temporary = path.with_suffix(path.suffix + ".tmp")
+    with zipfile.ZipFile(path, "r") as source, zipfile.ZipFile(
+        temporary,
+        "w",
+        compression=zipfile.ZIP_DEFLATED,
+    ) as target:
+        for info in source.infolist():
+            data = source.read(info.filename)
+            if info.filename == "docProps/app.xml":
+                root = ET.fromstring(data)
+                values = {
+                    "Application": "Lemon串口监控",
+                    "AppVersion": "0.1.0",
+                    "Company": "Lemon串口监控",
+                    "Pages": str(page_count),
+                }
+                for name, value in values.items():
+                    element = root.find(f"{{{namespace}}}{name}")
+                    if element is None:
+                        element = ET.SubElement(root, f"{{{namespace}}}{name}")
+                    element.text = value
+                data = ET.tostring(root, encoding="utf-8", xml_declaration=True)
+            target.writestr(info, data)
+    shutil.copyfile(temporary, path)
+    temporary.unlink()
 
 
 def append_abstract_numbering(doc: Document, abstract_id: int, bullet: bool) -> None:
@@ -472,10 +513,10 @@ def add_cover(doc: Document) -> None:
     metadata = doc.add_paragraph()
     metadata.alignment = WD_ALIGN_PARAGRAPH.CENTER
     metadata.paragraph_format.space_after = Pt(4)
-    set_run_font(metadata.add_run("适用：Windows 10/11 x64，Windows Server 2019/2022/2025 x64"), size=9.5, color=MUTED)
+    set_run_font(metadata.add_run("兼容目标：Windows 10/11 x64，Windows Server 2019/2022/2025 x64"), size=9.5, color=MUTED)
     metadata2 = doc.add_paragraph()
     metadata2.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    set_run_font(metadata2.add_run("文档版本：0.1.0  |  2026-07-14"), size=9.5, color=MUTED)
+    set_run_font(metadata2.add_run("文档版本：0.1.0  |  2026-07-15"), size=9.5, color=MUTED)
 
 
 def build_document() -> Document:
@@ -541,7 +582,7 @@ def build_document() -> Document:
         doc,
         ["检查项", "要求"],
         [
-            ["系统", "Windows 10/11 x64；Server 2019/2022/2025 x64"],
+            ["兼容目标", "Windows 10/11 x64；Server 2019/2022/2025 x64"],
             ["权限", "本机管理员；安装和卸载会触发 UAC"],
             ["安全启动", "必须关闭；开启时安装程序会停止"],
             ["设备加密", "如启用 BitLocker，先确认恢复密钥可用"],
@@ -557,22 +598,30 @@ def build_document() -> Document:
     )
     for item in (
         "安装程序把随包公钥精确导入 LocalMachine Root 和 TrustedPublisher。",
+        "把自签名测试证书加入系统证书库会改变本机信任边界；持有对应私钥的人签名的代码可能在本机被信任。安装包只携带公钥，不包含私钥。",
         "需要时自动启用 TESTSIGNING，并明确提示重启。",
         "不会关闭安全启动，不会修改 BitLocker，不会使用 nointegritychecks。",
         "卸载只移除本次安装拥有的证书；只有安装程序实际改变 TESTSIGNING 时才恢复关闭。",
+        "安装文件没有微软信任链，也没有 RFC 3161 公共时间戳；首次运行仍可能显示 SmartScreen 或未知发布者。",
     ):
         lists.bullet(item)
+    add_callout(
+        doc,
+        "先核对来源",
+        "测试证书要等安装程序取得管理员权限后才能导入。只从本项目 GitHub Release 下载，并在运行前核对 SHA256SUMS.txt。",
+        "warning",
+    )
 
     add_heading(doc, "3. 图形化安装", 1)
     lists.numbered(
         [
             "双击“Lemon串口监控-安装程序-x64.exe”。",
-            "在 UAC 提示中核对程序名称并点击“是”。",
+            "遇到 SmartScreen 或 UAC 时核对下载来源和 SHA-256，再按 Windows 提示继续。",
             "阅读本地测试证书说明并勾选接受。",
             "选择桌面程序安装位置，默认是 C:\\Program Files\\Lemon串口监控。",
             "选择是否创建桌面快捷方式，在准备页核对安装模式和目标位置。",
             "点击“安装”；不要在运行过程中手工移动临时文件或结束 PowerShell 子进程。",
-            "提示重启时保存工作并立即重启，重启后再判断驱动是否可用。",
+            "提示重启时先保存工作，再按提示重启；重启后再判断驱动是否可用。",
         ]
     )
     add_callout(
@@ -609,6 +658,12 @@ def build_document() -> Document:
             "让原业务软件收发一次，确认列表出现 Read、Write 或 Ioctl。",
             "点击“停止”，完成一次 CSV 导出。",
         ]
+    )
+    add_callout(
+        doc,
+        "当前没有串口设备",
+        "后台服务仍应保持运行。刷新后显示服务已连接、端口列表为空、驱动暂不可用属于正常状态；接入真实设备后再次刷新，不需要反复重装。",
+        "note",
     )
 
     add_heading(doc, "4. 界面与捕获状态", 1)
@@ -788,6 +843,10 @@ def build_document() -> Document:
         '{\n  "mcpServers": {\n    "lemon-serial-monitor": {\n      "command": "C:\\\\Program Files\\\\Lemon串口监控\\\\ai\\\\Lemon.SerialMonitor.AI.exe",\n      "args": ["mcp"]\n    }\n  }\n}',
     )
     add_paragraph(doc, "安装到其他位置时必须改成实际绝对路径。连接成功应列出 11 个工具和 4 个资源。")
+    add_paragraph(
+        doc,
+        "没有接入串口设备时，状态工具仍应返回服务可用，driverState 可为不可用，端口工具返回空数组。这是正常的无设备状态，AI 不应把它解释成后台服务崩溃。",
+    )
     add_heading(doc, "10.2 推荐调用顺序", 2)
     lists.numbered(
         [
@@ -813,11 +872,32 @@ def build_document() -> Document:
     add_code(
         doc,
         "& $lemon capture start --device-id 0000000000000011 --label board-test --json\n"
+        "& $lemon capture pause --lease-id '<leaseId>' --json\n"
+        "& $lemon capture resume --lease-id '<leaseId>' --json\n"
         "& $lemon events read --session-id '<sessionId>' --limit 100 --include-hex --json\n"
+        "& $lemon events wait --session-id '<sessionId>' --cursor '<nextCursor>' --resume-receipt '<resumeReceipt>' --limit 100 --timeout-seconds 30 --include-hex --jsonl\n"
+        "& $lemon export --session-id '<sessionId>' --format jsonl --label board-test --json\n"
         "& $lemon capture stop --lease-id '<leaseId>' --json",
     )
 
-    add_heading(doc, "10.4 完整性判定", 2)
+    add_heading(doc, "10.4 CLI 退出码", 2)
+    add_table(
+        doc,
+        ["退出码", "含义"],
+        [
+            ["0", "成功"],
+            ["2", "参数或输入错误"],
+            ["3", "访问被拒绝或协议不兼容"],
+            ["4", "后台服务、驱动或设备不可用"],
+            ["5", "捕获冲突，或租约无效/过期"],
+            ["6", "数据缺口、完整性未知或连续性未证明"],
+            ["7", "超时或操作取消"],
+            ["10", "未预期运行错误"],
+        ],
+        [1700, 7660],
+    )
+
+    add_heading(doc, "10.5 完整性判定", 2)
     add_table(
         doc,
         ["字段", "判定"],
@@ -852,6 +932,12 @@ def build_document() -> Document:
         doc,
         "Server Core 使用 MCP 或 JSON CLI 操作。安装器只接受已知正式构建，未知 Server 版本会停止。测试签名、安全启动、重启和完整卸载要求与桌面系统相同。",
     )
+    add_callout(
+        doc,
+        "验证范围",
+        "Windows Server 2022/2025 只完成 GitHub 托管桌面 runner 的平台、托管测试和安装契约检查，未装载内核驱动；Server Core 只有布局契约测试，Server 2019 自托管任务未执行。0.1.0 没有任何 Server 驱动端到端实测，重要环境必须先在同版本测试机完成全流程验证。",
+        "caution",
+    )
 
     add_heading(doc, "12. 数据备份与更新", 1)
     add_heading(doc, "12.1 导出备份", 2)
@@ -871,7 +957,7 @@ def build_document() -> Document:
             "安装新版本并再次重启/验证。",
         ]
     )
-    add_paragraph(doc, "不要直接覆盖正在加载的 SYS、后台服务 EXE 或受保护安装记录。")
+    add_paragraph(doc, "0.1.0 不支持在已有新式安装上原地覆盖。不要直接覆盖正在加载的 SYS、后台服务 EXE 或受保护安装记录。")
 
     add_heading(doc, "13. 常见故障", 1)
     add_table(
@@ -879,6 +965,7 @@ def build_document() -> Document:
         ["症状", "先做什么", "仍失败时"],
         [
             ["完全没数据", "刷新、勾选、开始；让原业务软件真实通信", "核对 COM 号和状态栏错误"],
+            ["端口为空", "确认设备管理器是否存在可用串口", "无设备时服务运行、驱动暂不可用属于正常状态"],
             ["终端空", "看列表是否只有 Ioctl", "确认有 Read/Write 正文"],
             ["服务未连接", "安装后重启；检查服务状态", "查看 Windows 应用/系统事件"],
             ["驱动未就绪", "检查重启、TESTSIGNING、安全启动", "检查证书、策略和驱动事件"],
@@ -915,9 +1002,13 @@ def build_document() -> Document:
             "打开 Windows 设置 → 应用 → 已安装的应用。",
             "找到 Lemon串口监控并点击卸载。",
             "阅读数据删除警告并确认，允许管理员权限。",
-            "等待驱动、服务、过滤器、证书、文件和数据清理。",
-            "提示重启时立即重启；卸载程序会自动继续并核验残留。",
+            "卸载程序会先关闭本软件桌面程序、AI 客户端和后台服务，再清理驱动、过滤器、证书、文件和数据。",
+            "提示重启时先保存工作，再按提示重启；卸载程序会自动继续并核验残留。",
         ]
+    )
+    add_paragraph(
+        doc,
+        "正常用户态文件不应只因本软件自身仍在运行而要求重启；内核驱动、Ports 类设备栈、启动策略或 Windows 文件锁仍可能必须在重启后完成清理。",
     )
     add_heading(doc, "14.1 卸载会清理什么", 2)
     for item in (
@@ -953,11 +1044,13 @@ def build_document() -> Document:
         [2100, 7260],
     )
 
+    add_page_break(doc)
     add_heading(doc, "16. 最终检查清单", 1)
     for item in (
         "□ 安装包来自正式发布页，SHA-256 一致。",
         "□ 已理解测试证书、TESTSIGNING、安全启动和重启影响。",
         "□ 监控前刷新、勾选并点击开始。",
+        "□ 无设备时已确认服务保持运行，接入设备后再刷新。",
         "□ 原业务软件在开始后发生真实读写。",
         "□ 结束时先停止，再复制或导出。",
         "□ 严谨分析检查截断、丢弃、缺口和 AI 完整性。",
@@ -974,6 +1067,7 @@ def build_document() -> Document:
 
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     doc.save(OUTPUT_PATH)
+    normalize_extended_properties(OUTPUT_PATH, EXPECTED_RENDERED_PAGE_COUNT)
     return doc
 
 
@@ -1016,6 +1110,12 @@ def audit_document(path: Path) -> dict[str, object]:
     with zipfile.ZipFile(path) as archive:
         document_xml = archive.read("word/document.xml").decode("utf-8")
         numbering_xml = archive.read("word/numbering.xml").decode("utf-8")
+        extended_xml = archive.read("docProps/app.xml").decode("utf-8")
+        package_xml = "\n".join(
+            archive.read(name).decode("utf-8", errors="replace")
+            for name in archive.namelist()
+            if name.endswith((".xml", ".rels"))
+        )
     required = (
         "Lemon串口监控",
         "八种复制格式",
@@ -1023,13 +1123,26 @@ def audit_document(path: Path) -> dict[str, object]:
         "完整卸载",
         "Windows Server",
         "completeForReturnedRange",
+        "RFC 3161",
+        "后台服务仍应保持运行",
+        "不支持在已有新式安装上原地覆盖",
+        "Server 2019 自托管任务未执行",
+        "卸载程序会先关闭本软件桌面程序",
     )
     for phrase in required:
-        if phrase not in document_xml:
+        if phrase not in package_xml:
             raise RuntimeError(f"required manual phrase missing: {phrase}")
     forbidden = "CommMonitor " + "串口监控精灵"
-    if forbidden in document_xml:
+    if forbidden in package_xml:
         raise RuntimeError("retired public product name is present")
+    extended_root = ET.fromstring(extended_xml)
+    extended_namespace = "http://schemas.openxmlformats.org/officeDocument/2006/extended-properties"
+    pages = extended_root.find(f"{{{extended_namespace}}}Pages")
+    application = extended_root.find(f"{{{extended_namespace}}}Application")
+    if pages is None or pages.text != str(EXPECTED_RENDERED_PAGE_COUNT):
+        raise RuntimeError("extended page count does not match the verified render")
+    if application is None or application.text != "Lemon串口监控":
+        raise RuntimeError("extended application metadata is incorrect")
     if "w:numFmt w:val=\"bullet\"" not in numbering_xml:
         raise RuntimeError("real bullet numbering definition is missing")
     for paragraph in reopened.paragraphs:
