@@ -1,5 +1,7 @@
 # Lemon串口监控 0.1.0 发布说明
 
+[简体中文](RELEASE_NOTES_0.1.0.md) | [English](RELEASE_NOTES_0.1.0.en.md)
+
 这是第一个可安装版本，面向个人测试和硬件/软件联调。
 
 ## 本版提供

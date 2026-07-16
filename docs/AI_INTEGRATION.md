@@ -1,5 +1,7 @@
 # Lemon串口监控 AI 接入指南
 
+[简体中文](AI_INTEGRATION.md) | [English](AI_INTEGRATION.en.md)
+
 Lemon串口监控提供两个面向自动化的入口：标准 MCP stdio 服务和 JSON 命令行。两者都通过安装在本机的受信任客户端连接后台服务，不直接打开 COM 端口，也不开放网络监听。
 
 ## 能做什么

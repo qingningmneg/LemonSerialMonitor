@@ -1,5 +1,7 @@
 # Lemon串口监控 AI 接口参考
 
+[简体中文](AI_API_REFERENCE.md) | [English](AI_API_REFERENCE.en.md)
+
 ## 传输与版本
 
 - MCP：标准输入/标准输出（stdio）
