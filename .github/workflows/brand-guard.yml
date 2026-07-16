@@ -18,3 +18,7 @@ jobs:
       - name: Reject retired visible branding
         shell: pwsh
         run: ./scripts/Test-LemonBrand.ps1
+
+      - name: Check bilingual documentation
+        shell: pwsh
+        run: ./scripts/Test-BilingualDocs.ps1
