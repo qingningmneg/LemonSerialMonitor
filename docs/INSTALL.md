@@ -28,14 +28,14 @@
 只从本项目 GitHub Releases 页面下载安装包。发布页同时提供 `SHA256SUMS.txt`，可选地用 PowerShell 核对：
 
 ```powershell
-Get-FileHash '.\Lemon串口监控-安装程序-x64.exe' -Algorithm SHA256
+Get-FileHash '.\LemonSerialMonitor-Setup-x64.exe' -Algorithm SHA256
 ```
 
 显示的 SHA-256 应与同一版本发布页一致。文件来源或哈希不一致时不要运行。
 
 ## 一键安装
 
-1. 双击 `Lemon串口监控-安装程序-x64.exe`。
+1. 双击 `LemonSerialMonitor-Setup-x64.exe`。
 2. Windows 显示 SmartScreen 或“用户账户控制”时，只在下载来源和 SHA-256 与同版 Release 一致后继续。
 3. 完整阅读“本地测试证书使用说明”，勾选接受后继续。
 4. 选择桌面程序安装位置。默认是：

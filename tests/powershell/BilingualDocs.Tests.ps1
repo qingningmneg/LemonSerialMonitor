@@ -27,6 +27,14 @@ $safetyTerms = @(
     'not hardware certification'
 )
 
+$installerAssetName = 'LemonSerialMonitor-Setup-x64.exe'
+$installerDownloadPaths = @(
+    'README.md',
+    'README.en.md',
+    'docs/INSTALL.md',
+    'docs/INSTALL.en.md'
+)
+
 function Write-TestUtf8File {
     param(
         [Parameter(Mandatory)][string] $Path,
@@ -51,14 +59,17 @@ function New-BilingualDocsFixture {
             '# Chinese fixture',
             "[English]($englishBaseName)"
         )
-        if ($pair.Key -eq 'README.md') {
-            $chineseLines += 'Download LemonSerialMonitor-Setup-x64.exe.'
+        if ($script:installerDownloadPaths -contains $pair.Key) {
+            $chineseLines += "Download $script:installerAssetName."
         }
 
         $englishLines = @(
             '# English fixture',
             "[Chinese]($chineseBaseName)"
         )
+        if ($script:installerDownloadPaths -contains $pair.Value) {
+            $englishLines += "Download $script:installerAssetName."
+        }
         if ($pair.Value -eq 'README.en.md') {
             $englishLines += $script:safetyTerms
         }
@@ -165,20 +176,28 @@ Describe 'Bilingual documentation guard' {
         $message | Should Match 'UTF-8'
     }
 
-    It 'rejects the wrong installer asset name in README.md' {
-        $root = Join-Path $TestDrive 'wrong-installer'
+    It 'rejects the wrong installer asset name in <RelativePath>' -TestCases @(
+        @{ RelativePath = 'README.md' },
+        @{ RelativePath = 'README.en.md' },
+        @{ RelativePath = 'docs/INSTALL.md' },
+        @{ RelativePath = 'docs/INSTALL.en.md' }
+    ) {
+        param([string] $RelativePath)
+
+        $fixtureName = $RelativePath -replace '[^A-Za-z0-9]', '-'
+        $root = Join-Path $TestDrive ('wrong-installer-' + $fixtureName)
         New-BilingualDocsFixture -Root $root
-        $readmePath = Join-Path $root 'README.md'
-        $readme = [IO.File]::ReadAllText($readmePath)
+        $documentPath = Join-Path $root $RelativePath
+        $document = [IO.File]::ReadAllText($documentPath)
         Write-TestUtf8File `
-            -Path $readmePath `
-            -Content $readme.Replace(
-                'LemonSerialMonitor-Setup-x64.exe',
+            -Path $documentPath `
+            -Content $document.Replace(
+                $installerAssetName,
                 'LemonSerialMonitor-Setup.exe')
 
         $message = Get-BilingualGuardError -Root $root
 
-        $message | Should Match 'README\.md'
+        $message | Should Match ([regex]::Escape($RelativePath))
         $message | Should Match 'LemonSerialMonitor-Setup-x64\.exe'
     }
 

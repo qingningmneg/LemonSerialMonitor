@@ -122,7 +122,7 @@ Export processes the full persisted session, not only the selected rows. To copy
 First run:
 
 ```powershell
-& '<安装目录>\ai\Lemon.SerialMonitor.AI.exe' status --json
+& '<installation-directory>\ai\Lemon.SerialMonitor.AI.exe' status --json
 ```
 
 Check:

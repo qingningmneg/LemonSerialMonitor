@@ -143,7 +143,7 @@ For normal reads, use the `nextCursor` and `resumeReceipt` returned by the servi
 Use the following only when explicitly accepting that continuity cannot be verified:
 
 ```text
---after-sequence <十进制序号> --allow-unverified-seek
+--after-sequence <decimal-sequence-number> --allow-unverified-seek
 ```
 
 This type of read may omit or duplicate events, or cross a range that cannot be proven. Its result must be marked as an unverified seek.

@@ -116,10 +116,18 @@ foreach ($relativePath in $documents.Keys) {
 }
 
 $installerAssetName = 'LemonSerialMonitor-Setup-x64.exe'
-if ($documents['README.md'].IndexOf(
-        $installerAssetName,
-        [StringComparison]::Ordinal) -lt 0) {
-    throw "README.md must contain installer asset name $installerAssetName"
+$installerDownloadPaths = @(
+    'README.md',
+    'README.en.md',
+    'docs/INSTALL.md',
+    'docs/INSTALL.en.md'
+)
+foreach ($relativePath in $installerDownloadPaths) {
+    if ($documents[$relativePath].IndexOf(
+            $installerAssetName,
+            [StringComparison]::Ordinal) -lt 0) {
+        throw "$relativePath must contain installer asset name $installerAssetName"
+    }
 }
 
 $englishCorpus = @(
