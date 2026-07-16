@@ -1,5 +1,7 @@
 # Lemon串口监控故障排查
 
+[简体中文](TROUBLESHOOTING.md) | [English](TROUBLESHOOTING.en.md)
+
 ## 看不到任何数据
 
 按这个顺序检查：

@@ -1,5 +1,7 @@
 # Lemon串口监控操作指南
 
+[简体中文](USER_GUIDE.md) | [English](USER_GUIDE.en.md)
+
 ## 先记住四件事
 
 1. 软件只监控已经发生的通信，不会主动向设备发送数据。
