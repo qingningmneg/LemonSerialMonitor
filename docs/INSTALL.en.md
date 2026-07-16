@@ -54,7 +54,7 @@ If a Windows certificate confirmation window appears during installation, compar
 The installation process automatically performs the following actions:
 
 - Validates the SHA-256 manifest for every file in the installer package.
-- Validates the signing relationship among the driver, directory files, and test certificate.
+- Validates the signing relationship among the driver, catalog files, and test certificate.
 - Imports the bundled public certificate precisely into the local machine's Root and TrustedPublisher certificate stores.
 - Enables `TESTSIGNING` when required.
 - Installs the serial-port filter driver and the LocalSystem background service.

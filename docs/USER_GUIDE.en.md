@@ -76,7 +76,7 @@ Available encodings:
 - UTF-16LE
 - UTF-16BE
 
-You can also show or hide the time, port, and direction, and toggle word wrap and automatic scrolling. Changing the encoding affects only new data that arrives afterward; it does not reinterpret content already displayed.
+You can also show or hide **Time** (`时间`), **Port** (`端口`), and **Direction** (`方向`), and toggle **Word Wrap** (`自动换行`) and **Auto Scroll** (`自动滚动`). Changing the encoding affects only new data that arrives afterward; it does not reinterpret content already displayed.
 
 ## Find
 
