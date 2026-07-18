@@ -78,6 +78,29 @@ function Test-AstContainsAssignment {
         $Assignment.Extent.EndOffset -le $Container.Extent.EndOffset
 }
 
+function Get-NormalizedAstText {
+    param([Parameter(Mandatory)][string] $Text)
+
+    return ([regex]::Replace($Text, '\s+', ' ').Trim()).Replace('` ', '')
+}
+
+function Get-SingleReleaseAssignmentRightText {
+    param(
+        [Parameter(Mandatory)]
+        [Management.Automation.Language.ScriptBlockAst] $Ast,
+        [Parameter(Mandatory)][string] $VariableName
+    )
+
+    $assignments = @(Get-ReleaseArrayAssignments `
+            -Ast $Ast `
+            -VariableName $VariableName)
+    $assignments.Count | Should Be 1
+    if ($assignments.Count -ne 1) {
+        return ''
+    }
+    return Get-NormalizedAstText $assignments[0].Right.Extent.Text
+}
+
 Describe 'Lemon release bundle contract' {
     It 'has a parseable strict release verifier' {
         Test-Path -LiteralPath $releaseScriptPath -PathType Leaf |
@@ -139,25 +162,59 @@ Describe 'Lemon release bundle contract' {
         }
     }
 
-    It 'separates Chinese build source names from English public asset names' {
-        $text = Get-Content -Raw -LiteralPath $releaseScriptPath -Encoding UTF8
+    It 'binds each build source and public asset role to its exact name' {
+        $ast = Get-ReleaseScriptAst
+        (Get-SingleReleaseAssignmentRightText `
+                -Ast $ast `
+                -VariableName 'installerSourceFileName') | Should Be `
+            '$productName + ''-'' + $installerWord + ''-x64.exe'''
+        (Get-SingleReleaseAssignmentRightText `
+                -Ast $ast `
+                -VariableName 'manualSourceFileName') | Should Be `
+            '$productName + ''-'' + $manualWords + ''.pdf'''
+        (Get-SingleReleaseAssignmentRightText `
+                -Ast $ast `
+                -VariableName 'installerPublicFileName') | Should Be `
+            "'LemonSerialMonitor-Setup-x64.exe'"
+        (Get-SingleReleaseAssignmentRightText `
+                -Ast $ast `
+                -VariableName 'manualPublicFileName') | Should Be `
+            "'LemonSerialMonitor-User-Manual-zh-CN.pdf'"
+    }
 
-        foreach ($required in @(
-                '$installerSourceFileName = $productName + ''-'' + $installerWord + ''-x64.exe''',
-                '$manualSourceFileName = $productName + ''-'' + $manualWords + ''.pdf''',
-                '$installerSourceFileName',
-                '$manualSourceFileName',
-                '$installerPublicFileName',
-                '$manualPublicFileName',
-                '$InstallerPath = Join-Path (Join-Path $artifactsRoot ''installer'')',
-                '$installerSourceFileName',
-                '$ManualPath = Join-Path (Join-Path $artifactsRoot ''manual'')',
-                '$manualSourceFileName',
-                '-Destination (Join-Path $stagingRoot $installerPublicFileName)',
-                '-Destination (Join-Path $stagingRoot $manualPublicFileName)')) {
-            if (-not $text.Contains($required)) {
-                throw "Release script is missing a source/public name boundary: $required"
-            }
+    It 'binds installer and manual sources to the matching public destinations' {
+        $ast = Get-ReleaseScriptAst
+        (Get-SingleReleaseAssignmentRightText `
+                -Ast $ast `
+                -VariableName 'InstallerPath') | Should Be `
+            "Join-Path (Join-Path `$artifactsRoot 'installer') `$installerSourceFileName"
+        (Get-SingleReleaseAssignmentRightText `
+                -Ast $ast `
+                -VariableName 'ManualPath') | Should Be `
+            "Join-Path (Join-Path `$artifactsRoot 'manual') `$manualSourceFileName"
+
+        $copyCommands = @($ast.FindAll({
+                    param($node)
+                    $node -is [Management.Automation.Language.CommandAst] -and
+                    $node.GetCommandName() -eq 'Copy-Item'
+                }, $true))
+        $installerCopy = @($copyCommands | Where-Object {
+                $_.Extent.Text.Contains('$installerSource.FullName')
+            })
+        $manualCopy = @($copyCommands | Where-Object {
+                $_.Extent.Text.Contains('$manualSource.FullName')
+            })
+        $installerCopy.Count | Should Be 1
+        $manualCopy.Count | Should Be 1
+        if ($installerCopy.Count -eq 1) {
+            (Get-NormalizedAstText $installerCopy[0].Extent.Text) |
+                Should Match ([regex]::Escape(
+                        '-Destination (Join-Path $stagingRoot $installerPublicFileName)'))
+        }
+        if ($manualCopy.Count -eq 1) {
+            (Get-NormalizedAstText $manualCopy[0].Extent.Text) |
+                Should Match ([regex]::Escape(
+                        '-Destination (Join-Path $stagingRoot $manualPublicFileName)'))
         }
     }
 
@@ -191,11 +248,17 @@ Describe 'Lemon release bundle contract' {
             $text = Get-Content -Raw `
                 -LiteralPath (Join-Path $repoRoot $relativePath) `
                 -Encoding UTF8
-            foreach ($assetName in $expectedAssets) {
-                if (-not $text.Contains($assetName)) {
-                    throw "$relativePath does not document public asset: $assetName"
-                }
-            }
+            $assetMatches = [regex]::Matches(
+                $text,
+                '(?m)^\s*(?<index>\d+)\.\s+`(?<name>[^`]+)`\s*$')
+            $actualIndexes = @($assetMatches | ForEach-Object {
+                    [int]$_.Groups['index'].Value
+                })
+            $actualAssets = @($assetMatches | ForEach-Object {
+                    $_.Groups['name'].Value
+                })
+            ($actualIndexes -join "`n") | Should Be ((1..6) -join "`n")
+            ($actualAssets -join "`n") | Should Be ($expectedAssets -join "`n")
         }
 
         foreach ($relativePath in @(
@@ -286,19 +349,22 @@ Describe 'Lemon release bundle contract' {
                     $node.Clauses[0].Item1.Extent.Text -eq '$Create'
                 }, $true))
         $verifier.Count | Should Be 1
-        $createPath.Count | Should Be 1
+        ($createPath.Count -ge 1) | Should Be $true
         if ($assignments.Count -eq 2 -and
             $verifier.Count -eq 1 -and
-            $createPath.Count -eq 1) {
+            $createPath.Count -ge 1) {
             @($assignments | Where-Object {
                     Test-AstContainsAssignment `
                         -Container $verifier[0] `
                         -Assignment $_
                 }).Count | Should Be 1
             @($assignments | Where-Object {
-                    Test-AstContainsAssignment `
-                        -Container $createPath[0] `
-                        -Assignment $_
+                    $assignment = $_
+                    @($createPath | Where-Object {
+                            Test-AstContainsAssignment `
+                                -Container $_ `
+                                -Assignment $assignment
+                        }).Count -gt 0
                 }).Count | Should Be 1
         }
 
@@ -355,6 +421,50 @@ Describe 'Lemon release bundle contract' {
             Should Be $true
         $text.Contains('([string]$versionInfo.ProductVersion).Trim()') |
             Should Be $true
+    }
+
+    It 'binds bundle metadata to an explicitly expected clean source revision' {
+        $releaseText = Get-Content -Raw `
+            -LiteralPath $releaseScriptPath `
+            -Encoding UTF8
+        $buildText = Get-Content -Raw `
+            -LiteralPath $buildInstallerPath `
+            -Encoding UTF8
+        foreach ($required in @(
+                '[string] $ExpectedSourceRevision',
+                'SourceRevision = $ExpectedSourceRevision',
+                'SourceTreeDirty = $false',
+                '-ExpectedSourceRevision $ExpectedSourceRevision')) {
+            $releaseText.Contains($required) | Should Be $true
+        }
+        foreach ($required in @(
+                '$expectedSourceRevision',
+                "'rev-parse'",
+                "'status'",
+                '-ExpectedSourceRevision $expectedSourceRevision')) {
+            $buildText.Contains($required) | Should Be $true
+        }
+        $releaseText.Contains('SourceTreeDirty = -not') | Should Be $false
+    }
+
+    It 'requires exact installer product and file versions' {
+        $text = Get-Content -Raw -LiteralPath $releaseScriptPath -Encoding UTF8
+        $text.Contains('$installerProductVersion -cne $ExpectedVersion') |
+            Should Be $true
+        $text.Contains('$installerFileVersion -cne ($ExpectedVersion + ''.0'')') |
+            Should Be $true
+        $text.Contains('$installerProductVersion.StartsWith(') | Should Be $false
+    }
+
+    It 'verifies the public LICENSE is byte-identical to the canonical source' {
+        $text = Get-Content -Raw -LiteralPath $releaseScriptPath -Encoding UTF8
+        foreach ($required in @(
+                'ExpectedLicenseSha256',
+                'Get-FileHash',
+                '$releaseLicenseSha256',
+                'Release MIT license is not byte-identical to the canonical project LICENSE.')) {
+            $text.Contains($required) | Should Be $true
+        }
     }
 
     It 'embeds examples and the verified manual in setup and exposes the manual from Start' {

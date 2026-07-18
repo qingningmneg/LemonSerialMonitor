@@ -120,9 +120,44 @@ function Remove-LemonBuildCertificateFromStore {
     }
 }
 
+function Get-LemonBuildGitValue {
+    param([Parameter(Mandatory)][string[]] $Arguments)
+
+    $lines = @(& git -C $repoRoot @Arguments 2>$null)
+    if ($LASTEXITCODE -ne 0) {
+        throw "Git failed while preparing the release: $($Arguments -join ' ')"
+    }
+    return (($lines | ForEach-Object { [string]$_ }) -join "`n").Trim()
+}
+
+function Assert-LemonBuildSourceRevision {
+    param([Parameter(Mandatory)][string] $ExpectedRevision)
+
+    $actualRevision = Get-LemonBuildGitValue -Arguments @(
+        'rev-parse', '--verify', 'HEAD')
+    if ($actualRevision -notmatch '^[0-9A-Fa-f]{40,64}$' -or
+        $actualRevision.ToLowerInvariant() -cne
+            $ExpectedRevision.ToLowerInvariant()) {
+        throw 'The source revision changed during the installer build.'
+    }
+    $status = Get-LemonBuildGitValue -Arguments @(
+        'status', '--porcelain=v1', '--untracked-files=all')
+    if (-not [string]::IsNullOrWhiteSpace($status)) {
+        throw "The installer release source tree is not clean:`n$status"
+    }
+}
+
 if (-not (Test-Path -LiteralPath $innoScript -PathType Leaf)) {
     throw "Inno installer source was not found: $innoScript"
 }
+
+$expectedSourceRevision = Get-LemonBuildGitValue -Arguments @(
+    'rev-parse', '--verify', 'HEAD')
+if ($expectedSourceRevision -notmatch '^[0-9A-Fa-f]{40,64}$') {
+    throw 'Unable to capture a valid source revision before the installer build.'
+}
+$expectedSourceRevision = $expectedSourceRevision.ToLowerInvariant()
+Assert-LemonBuildSourceRevision -ExpectedRevision $expectedSourceRevision
 
 if (-not $SkipPayloadBuild) {
     & (Join-Path $PSScriptRoot 'Build-All.ps1') `
@@ -223,7 +258,8 @@ if (-not $SkipSigning) {
                     'manual\Lemon串口监控-完整操作手册.pdf') `
                 -ReleaseNotesPath $releaseNotesPath `
                 -InnoCompilerPath $compiler `
-                -ExpectedSignerThumbprint $thumbprint
+                -ExpectedSignerThumbprint $thumbprint `
+                -ExpectedSourceRevision $expectedSourceRevision
             if ($LASTEXITCODE -ne 0) {
                 throw "Test-ReleaseBundle.ps1 failed with exit code $LASTEXITCODE."
             }
@@ -249,6 +285,7 @@ if (-not $SkipSigning) {
     }
 }
 
+Assert-LemonBuildSourceRevision -ExpectedRevision $expectedSourceRevision
 $hash = (Get-FileHash -LiteralPath $installerPath -Algorithm SHA256).Hash.ToLowerInvariant()
 Write-Output "INNO_COMPILER=$compiler"
 Write-Output "INNO_VERSION=$requiredInnoVersion"

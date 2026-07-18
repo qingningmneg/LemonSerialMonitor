@@ -17,6 +17,9 @@ param(
 
     [string] $ExpectedSignerThumbprint,
 
+    [ValidatePattern('^[0-9A-Fa-f]{40,64}$')]
+    [string] $ExpectedSourceRevision,
+
     [string] $OutputRoot
 )
 
@@ -177,11 +180,40 @@ function Get-LemonGitValue {
     return (($lines | ForEach-Object { [string]$_ }) -join "`n").Trim()
 }
 
+function Get-LemonRequiredSourceRevision {
+    $revision = Get-LemonGitValue -Arguments @(
+        'rev-parse', '--verify', 'HEAD')
+    if ([string]::IsNullOrWhiteSpace($revision) -or
+        $revision -notmatch '^[0-9A-Fa-f]{40,64}$') {
+        throw 'Unable to resolve a valid source revision for the release bundle.'
+    }
+    return $revision.ToLowerInvariant()
+}
+
+function Assert-LemonCleanSourceRevision {
+    param([Parameter(Mandatory)][string] $ExpectedRevision)
+
+    $actualRevision = Get-LemonRequiredSourceRevision
+    if ($actualRevision -cne $ExpectedRevision.ToLowerInvariant()) {
+        throw 'The source revision changed during release bundle creation.'
+    }
+    $status = Get-LemonGitValue -Arguments @(
+        'status', '--porcelain=v1', '--untracked-files=all')
+    if ($null -eq $status) {
+        throw 'Unable to determine whether the release source tree is clean.'
+    }
+    if (-not [string]::IsNullOrWhiteSpace($status)) {
+        throw "The release source tree is not clean:`n$status"
+    }
+}
+
 function Test-LemonReleaseBundle {
     param(
         [Parameter(Mandatory)][string] $RootPath,
         [Parameter(Mandatory)][string] $ExpectedVersion,
-        [AllowEmptyString()][string] $SignerThumbprint
+        [AllowEmptyString()][string] $SignerThumbprint,
+        [Parameter(Mandatory)][string] $ExpectedSourceRevision,
+        [Parameter(Mandatory)][string] $ExpectedLicenseSha256
     )
 
     Assert-LemonReleaseChildPath -ParentPath $OutputRoot -ChildPath $RootPath
@@ -211,6 +243,12 @@ function Test-LemonReleaseBundle {
         -Role 'Release MIT license'
     Assert-LemonMitLicense -LiteralPath $releaseLicense.FullName `
         -Role 'Release MIT license'
+    $releaseLicenseSha256 = (Get-FileHash `
+            -LiteralPath $releaseLicense.FullName `
+            -Algorithm SHA256).Hash.ToLowerInvariant()
+    if ($releaseLicenseSha256 -cne $ExpectedLicenseSha256) {
+        throw 'Release MIT license is not byte-identical to the canonical project LICENSE.'
+    }
     $buildInfoPath = Join-Path $RootPath $buildInfoFileName
     $manifestPath = Join-Path $RootPath $manifestFileName
     [void](Assert-LemonOrdinaryFile -LiteralPath $buildInfoPath -Role 'Build information')
@@ -249,6 +287,12 @@ function Test-LemonReleaseBundle {
         [string]::IsNullOrWhiteSpace([string]$buildInfo.CompilerSignerSubject)) {
         throw 'BUILD-INFO.json does not describe the expected release.'
     }
+    if ([string]$buildInfo.SourceRevision -cne $ExpectedSourceRevision -or
+        $null -eq $buildInfo.PSObject.Properties['SourceTreeDirty'] -or
+        $buildInfo.SourceTreeDirty -isnot [bool] -or
+        [bool]$buildInfo.SourceTreeDirty) {
+        throw 'BUILD-INFO.json is not bound to the expected clean source revision.'
+    }
 
     $expectedThumbprint = if (-not [string]::IsNullOrWhiteSpace(
             $SignerThumbprint)) {
@@ -275,10 +319,10 @@ function Test-LemonReleaseBundle {
     $versionInfo = $installer.VersionInfo
     $installerProductName = ([string]$versionInfo.ProductName).Trim()
     $installerProductVersion = ([string]$versionInfo.ProductVersion).Trim()
+    $installerFileVersion = ([string]$versionInfo.FileVersion).Trim()
     if ($installerProductName -cne $productName -or
-        -not $installerProductVersion.StartsWith(
-            $ExpectedVersion,
-            [StringComparison]::Ordinal)) {
+        $installerProductVersion -cne $ExpectedVersion -or
+        $installerFileVersion -cne ($ExpectedVersion + '.0')) {
         throw 'Installer version resources do not match the release.'
     }
 
@@ -334,6 +378,31 @@ if (-not $OutputRoot.StartsWith(
         [StringComparison]::OrdinalIgnoreCase)) {
     throw "Release output must remain under the repository artifacts root: $OutputRoot"
 }
+
+if ([string]::IsNullOrWhiteSpace($LicensePath)) {
+    $LicensePath = Join-Path $repoRoot 'LICENSE'
+}
+$licenseSource = Assert-LemonOrdinaryFile `
+    -LiteralPath ([IO.Path]::GetFullPath($LicensePath)) `
+    -Role 'Project MIT license source'
+Assert-LemonMitLicense -LiteralPath $licenseSource.FullName `
+    -Role 'Project MIT license source'
+$expectedLicenseSha256 = (Get-FileHash `
+        -LiteralPath $licenseSource.FullName `
+        -Algorithm SHA256).Hash.ToLowerInvariant()
+
+if ($Create -and [string]::IsNullOrWhiteSpace($ExpectedSourceRevision)) {
+    throw 'ExpectedSourceRevision is required when creating a release bundle.'
+}
+if ([string]::IsNullOrWhiteSpace($ExpectedSourceRevision)) {
+    $ExpectedSourceRevision = Get-LemonRequiredSourceRevision
+}
+$ExpectedSourceRevision = $ExpectedSourceRevision.ToLowerInvariant()
+if ($Create) {
+    Assert-LemonCleanSourceRevision `
+        -ExpectedRevision $ExpectedSourceRevision
+}
+
 [void][IO.Directory]::CreateDirectory($artifactsRoot)
 [void][IO.Directory]::CreateDirectory($OutputRoot)
 
@@ -349,9 +418,6 @@ if ($Create) {
     if ([string]::IsNullOrWhiteSpace($ReleaseNotesPath)) {
         $ReleaseNotesPath = Join-Path $repoRoot `
             "docs\RELEASE_NOTES_$Version.md"
-    }
-    if ([string]::IsNullOrWhiteSpace($LicensePath)) {
-        $LicensePath = Join-Path $repoRoot 'LICENSE'
     }
     if ([string]::IsNullOrWhiteSpace($InnoCompilerPath)) {
         throw 'InnoCompilerPath is required when creating a release bundle.'
@@ -369,11 +435,6 @@ if ($Create) {
     $notesSource = Assert-LemonOrdinaryFile `
         -LiteralPath ([IO.Path]::GetFullPath($ReleaseNotesPath)) `
         -Role 'Release notes source'
-    $licenseSource = Assert-LemonOrdinaryFile `
-        -LiteralPath ([IO.Path]::GetFullPath($LicensePath)) `
-        -Role 'Project MIT license source'
-    Assert-LemonMitLicense -LiteralPath $licenseSource.FullName `
-        -Role 'Project MIT license source'
     $compiler = Assert-LemonOrdinaryFile `
         -LiteralPath ([IO.Path]::GetFullPath($InnoCompilerPath)) `
         -Role 'Inno Setup compiler'
@@ -414,8 +475,6 @@ if ($Create) {
         Copy-Item -LiteralPath $licenseSource.FullName `
             -Destination (Join-Path $stagingRoot $licenseFileName)
 
-        $gitRevision = Get-LemonGitValue -Arguments @('rev-parse', 'HEAD')
-        $gitStatus = Get-LemonGitValue -Arguments @('status', '--porcelain')
         $dotnetVersion = ((@(& dotnet --version 2>$null) |
                     ForEach-Object { [string]$_ }) -join '').Trim()
         $buildInfo = [pscustomobject][ordered]@{
@@ -425,8 +484,8 @@ if ($Create) {
             RuntimeIdentifier = 'win-x64'
             TestSigning = $true
             GeneratedUtc = [DateTimeOffset]::UtcNow.ToString('o')
-            SourceRevision = $gitRevision
-            SourceTreeDirty = -not [string]::IsNullOrWhiteSpace($gitStatus)
+            SourceRevision = $ExpectedSourceRevision
+            SourceTreeDirty = $false
             DotNetSdkVersion = $dotnetVersion
             InnoSetupVersion = '6.7.3'
             CompilerFileVersion = [string]$compiler.VersionInfo.FileVersion
@@ -461,7 +520,11 @@ if ($Create) {
         [void](Test-LemonReleaseBundle `
                 -RootPath $stagingRoot `
                 -ExpectedVersion $Version `
-                -SignerThumbprint $normalizedExpectedThumbprint)
+                -SignerThumbprint $normalizedExpectedThumbprint `
+                -ExpectedSourceRevision $ExpectedSourceRevision `
+                -ExpectedLicenseSha256 $expectedLicenseSha256)
+        Assert-LemonCleanSourceRevision `
+            -ExpectedRevision $ExpectedSourceRevision
         Remove-LemonReleaseTree `
             -ParentPath $OutputRoot `
             -TargetPath $bundleRoot
@@ -479,5 +542,7 @@ if ($Create) {
 $result = Test-LemonReleaseBundle `
     -RootPath $bundleRoot `
     -ExpectedVersion $Version `
-    -SignerThumbprint $ExpectedSignerThumbprint
+    -SignerThumbprint $ExpectedSignerThumbprint `
+    -ExpectedSourceRevision $ExpectedSourceRevision `
+    -ExpectedLicenseSha256 $expectedLicenseSha256
 $result | ConvertTo-Json -Depth 4
