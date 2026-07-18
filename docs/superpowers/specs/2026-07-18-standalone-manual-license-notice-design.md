@@ -10,21 +10,22 @@ Make the standalone Chinese manual accurately explain that Lemon串口监控 is 
 
 ## Approaches Considered
 
-1. Add a concise front-matter callout on the existing navigation page. This is prominent, keeps the manual task-focused, and does not renumber the sixteen operating sections. This is the selected approach.
-2. Add a full-license appendix. This provides the complete legal text but duplicates the canonical `LICENSE`, increases page count, and makes future license synchronization harder.
+1. Add a concise front-matter callout and a full-license appendix generated directly from the canonical root `LICENSE`. This is prominent, keeps the sixteen operating sections unchanged, and makes a separately shared PDF self-contained without hand-maintained legal text. This is the selected approach.
+2. Add only a full-license appendix. This is legally complete but makes the permission and attribution rule easy to miss during normal use.
 3. Add a notice to every footer. This is highly visible but distracts from instructions and uses limited footer space on every page.
 
 ## Design
 
 - Insert one `开源与署名` callout immediately after the navigation table.
 - State the exact MIT permission and retention rule in plain Chinese.
-- Name the canonical offline and online locations: installed `docs\LICENSE.txt` and repository-root `LICENSE`.
+- Add a page-broken `附录：MIT License` after the existing final checklist and evidence callout.
+- Read the appendix text directly from repository-root `LICENSE`; do not maintain a second handwritten legal-text source.
+- Name the canonical installed location `docs\LICENSE.txt` in the front-matter callout.
 - Preserve the existing visual system, section numbering, installation steps, and AI guidance.
-- Do not embed a second modified copy of the full MIT text in the manual.
 
 ## Verification
 
-- Add a failing contract test before editing the generator. It must require the exact owner, MIT, commercial/profit permission, and retention language in the manual source/audit contract.
+- Add a failing contract test before editing the generator. It must require the exact owner, MIT, commercial/profit permission, retention language, canonical root-license read, and full-license appendix in the manual source/audit contract.
 - Regenerate the DOCX with the pinned bundled Python runtime.
 - Convert the regenerated DOCX to PDF and render every page to PNG.
 - Inspect every page for missing glyphs, clipping, overlap, table splits, broken headings, and page-number problems.
@@ -35,5 +36,6 @@ Make the standalone Chinese manual accurately explain that Lemon串口监控 is 
 
 - A reader who only downloads the PDF can tell that commercial use and profit are allowed.
 - The same reader can tell that the copyright and MIT license notices must be retained.
+- The standalone PDF contains the complete canonical MIT permission and warranty-disclaimer text.
 - The exact owner is `qingningmneg` and the year is 2026.
 - The generated DOCX and PDF remain visually clean and release-ready.
