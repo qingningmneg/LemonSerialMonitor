@@ -1,10 +1,16 @@
-# Lemon串口监控
+# Lemon串口监控（Lemon Serial Monitor）
 
 [简体中文](README.md) | [English](README.en.md)
 
-我做这个工具，是为了在 Windows 上查看已经发生的串口通信，同时尽量不改变原软件的串口使用方式。它通过内核过滤驱动复制串口读写事件，桌面程序本身不打开 COM 端口，所以原业务程序仍然是端口的实际使用者。
+[![最新版本](https://img.shields.io/github/v/release/qingningmneg/LemonSerialMonitor?display_name=tag&sort=semver&label=release)](https://github.com/qingningmneg/LemonSerialMonitor/releases/latest) [![总下载量](https://img.shields.io/github/downloads/qingningmneg/LemonSerialMonitor/total?label=downloads)](https://github.com/qingningmneg/LemonSerialMonitor/releases) [![MIT 许可证](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE) [![Windows x64](https://img.shields.io/badge/Windows-x64-0078D4?logo=windows&logoColor=white)](#兼容目标系统)
 
-当前版本为 `0.1.0`，提供 Windows x64 安装包、桌面监控界面、命令行接口和 MCP 接口。个人使用免费。仓库目前没有附加开源许可证；可以查看代码和下载个人使用，但未经另行许可不要把代码或安装包改名后重新发布。
+我做这款免费开源的 Windows x64 串口监控工具，是想查看已经发生的通信，同时尽量不改变原软件的串口使用方式。它可用于 COM 端口抓包和串口嗅探：内核过滤驱动复制现有的读写事件，桌面程序本身不打开 COM 端口，因此原业务程序仍然是端口的实际使用者；WPF 界面、CLI 和 MCP 则分别用于人工查看、脚本接入和 AI 辅助调试。
+
+当前版本为 `0.1.0`，采用 [MIT](LICENSE) 许可证。个人使用和商业使用，以及修改、再分发、再许可和销售均获允许；分发本软件的副本或实质性部分时，必须保留版权声明和许可证中的许可声明。
+
+**[直接下载 `LemonSerialMonitor-Setup-x64.exe`](https://github.com/qingningmneg/LemonSerialMonitor/releases/latest/download/LemonSerialMonitor-Setup-x64.exe)**
+
+下载后请先根据对应 Release 中的 `SHA256SUMS.txt` 核对安装包。
 
 ## 下载与安装
 
@@ -45,6 +51,14 @@ Server Core 不安装 WPF 桌面程序，只安装驱动、后台服务、AI/命
 0.1.0 当前代码候选已在 Windows 11 x64 实机完成图形安装、重启、服务冷启动、桌面连接、JSON CLI 和 MCP；候选验证链还完成了前一候选的完整卸载以及当前代码候选的干净安装。没有接入串口设备时，后台服务仍会保持运行；点击“刷新端口”后，端口列表为空、驱动显示暂不可用属于正常状态，接入真实设备后再刷新即可。
 
 Windows Server 2022/2025 已在 GitHub 托管桌面 runner 完成平台识别、托管测试和安装契约检查，但没有装载内核驱动；Server Core 只有组件布局契约测试，Server 2019 自托管任务未执行。本次没有任何 Server 实机或虚拟机的驱动安装、重启、捕获、AI、卸载端到端验收，所以这些版本是兼容目标，不是已完成硬件认证。具体范围见 [0.1.0 发布说明](docs/RELEASE_NOTES_0.1.0.md)。
+
+## 与常规串口终端/助手的区别
+
+| 方面 | Lemon串口监控 | 常规串口终端/助手的典型方式 |
+| --- | --- | --- |
+| COM 端口关系 | 桌面界面不打开或取得被监控 COM 端口的所有权；内核过滤驱动复制已经发生的读写活动。 | 通常由工具直接打开 COM 端口并参与通信。 |
+| 数据方向 | 只读监控，不主动发送、注入或重放数据。 | 通常可以主动发送数据。 |
+| AI 辅助调试 | 通过受保护的本机 CLI/MCP 分页读取捕获事件，用于 AI 辅助软硬件调试。 | 是否提供本机自动化或分页接口取决于具体工具。 |
 
 ## 主要功能
 
@@ -118,6 +132,10 @@ MCP 配置示例：
 仓库已经包含生成安装包所需的已验收 DOCX/PDF 手册。源码构建还需要 Visual Studio 2022、WDK、Spectre 库、.NET SDK、Pester 和 Inno Setup 6.7.3。构建、签名、测试与安装包命令见 [构建说明](docs/BUILD.md)。
 
 安全边界和威胁模型见 [安全说明](docs/SECURITY.md)，版本变化见 [0.1.0 发布说明](docs/RELEASE_NOTES_0.1.0.md)。
+
+## 开源许可证
+
+Lemon串口监控由 `qingningmneg` 以 [MIT 许可证](LICENSE) 开源。MIT 允许个人使用和商业使用，也允许修改、再分发、再许可和销售；分发本软件的副本或实质性部分时，必须保留 `Copyright (c) 2026 qingningmneg` 和 MIT 许可声明。本软件按“原样”提供，不附带任何明示或默示担保；完整条款以 [LICENSE](LICENSE) 为准。
 
 ## 独立实现
 

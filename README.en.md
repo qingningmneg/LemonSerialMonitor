@@ -2,9 +2,15 @@
 
 [简体中文](README.md) | [English](README.en.md)
 
-I built this tool to inspect serial-port communication that has already occurred on Windows while changing as little as possible about how the original software uses the port. A kernel filter driver copies serial-port read and write events. The desktop application itself does not open the COM port, so the original application remains the port's actual user.
+[![Latest release](https://img.shields.io/github/v/release/qingningmneg/LemonSerialMonitor?display_name=tag&sort=semver&label=release)](https://github.com/qingningmneg/LemonSerialMonitor/releases/latest) [![Total downloads](https://img.shields.io/github/downloads/qingningmneg/LemonSerialMonitor/total?label=downloads)](https://github.com/qingningmneg/LemonSerialMonitor/releases) [![MIT License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE) [![Windows x64](https://img.shields.io/badge/Windows-x64-0078D4?logo=windows&logoColor=white)](#compatibility-targets)
 
-The current version is `0.1.0`. It provides a Windows x64 installer, a desktop monitoring UI, a command-line interface, and an MCP interface. It is free for personal use. The repository currently has no open-source license: you may inspect the code and download the software for personal use, but do not rename and republish the code or installer without separate permission.
+I built Lemon Serial Monitor (Lemon串口监控) as a free and open-source Windows x64 serial-port monitor for inspecting communication that has already occurred while changing as little as possible about how the original software uses the port. It works as a COM-port sniffer: a kernel filter driver copies existing read and write events without opening the COM port in the desktop application, so the original application remains the port's actual user. The WPF UI, CLI, and MCP interfaces support interactive inspection, automation, and AI-assisted debugging.
+
+The current version is `0.1.0` and is licensed under [MIT](LICENSE). Personal and commercial use, modification, redistribution, sublicensing, and sale are permitted. If you distribute copies or substantial portions of the software, you must retain the copyright and license notice.
+
+**[Download `LemonSerialMonitor-Setup-x64.exe` directly](https://github.com/qingningmneg/LemonSerialMonitor/releases/latest/download/LemonSerialMonitor-Setup-x64.exe)**
+
+After downloading, verify the installer with the corresponding Release's `SHA256SUMS.txt`.
 
 ## Download and installation
 
@@ -45,6 +51,14 @@ Server Core does not install the WPF desktop application. It installs only the d
 The current 0.1.0 code candidate completed graphical installation, restart, service cold start, desktop connection, JSON CLI, and MCP checks on a physical Windows 11 x64 system. The candidate validation chain also completed a full uninstall of the previous candidate and a clean installation of the current code candidate. When no serial device is attached, the background service remains running. After you click **Refresh Ports** (`刷新端口`), an empty port list and a temporarily unavailable driver are normal; attach a real device and refresh again.
 
 GitHub-hosted desktop runners for Windows Server 2022/2025 completed platform detection, managed tests, and installation-contract checks, but did not load the kernel driver. Server Core received component-layout contract tests only, and the Server 2019 self-hosted job was not run. No physical or virtual Server system received end-to-end acceptance testing for driver installation, restart, capture, AI, and uninstall in this release. These versions are compatibility targets, not hardware certification. See the [0.1.0 release notes](docs/RELEASE_NOTES_0.1.0.en.md) for the exact scope.
+
+## How it differs from a conventional serial terminal or assistant
+
+| Aspect | Lemon Serial Monitor | Typical serial terminal/assistant behavior |
+| --- | --- | --- |
+| Relationship to the COM port | The desktop UI does not open or take ownership of the monitored COM port; the kernel filter copies existing read/write activity. | The tool typically opens the COM port directly and participates in communication. |
+| Data direction | Read-only monitoring; it does not actively send, inject, or replay data. | The tool can typically send data actively. |
+| AI-assisted debugging | The protected local CLI/MCP interfaces expose captured events through pagination for AI-assisted hardware/software debugging. | Local automation and paginated interfaces depend on the specific tool. |
 
 ## Main features
 
@@ -118,6 +132,10 @@ Start a full uninstall from **Settings → Apps → Installed apps**, select **L
 The repository already contains the validated DOCX/PDF manuals required to build the installer. Building from source also requires Visual Studio 2022, the WDK, Spectre libraries, the .NET SDK, Pester, and Inno Setup 6.7.3. See [Build instructions](docs/BUILD.en.md) for the build, signing, test, and installer commands.
 
 See [Security](docs/SECURITY.en.md) for the security boundaries and threat model, and the [0.1.0 release notes](docs/RELEASE_NOTES_0.1.0.en.md) for version changes.
+
+## Open-source license
+
+Lemon Serial Monitor is open sourced by `qingningmneg` under the [MIT License](LICENSE). MIT permits personal and commercial use, modification, redistribution, sublicensing, and sale. Copies or substantial portions must retain `Copyright (c) 2026 qingningmneg` and the MIT permission notice. The software is provided “as is,” without express or implied warranties; see [LICENSE](LICENSE) for the complete terms.
 
 ## Independent implementation
 
