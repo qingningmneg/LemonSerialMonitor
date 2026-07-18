@@ -73,33 +73,103 @@ function Write-LemonUtf8NoBom {
 }
 
 function Convert-LemonReleaseNotesForBundle {
-    param([Parameter(Mandatory)][string] $LiteralPath)
+    param(
+        [Parameter(Mandatory)][string] $LiteralPath,
+        [Parameter(Mandatory)][string] $EnglishLiteralPath
+    )
 
-    if (-not (Test-Path -LiteralPath $LiteralPath -PathType Leaf)) {
-        throw "Release notes source was not found: $LiteralPath"
+    $simplifiedChineseLabel = -join ([char[]]@(
+            0x7b80, 0x4f53, 0x4e2d, 0x6587))
+    $chineseSourceFileName = [IO.Path]::GetFileName($LiteralPath)
+    $englishSourceFileName = [IO.Path]::GetFileName($EnglishLiteralPath)
+    if ([string]::IsNullOrWhiteSpace($chineseSourceFileName) -or
+        [string]::IsNullOrWhiteSpace($englishSourceFileName) -or
+        $chineseSourceFileName -ceq $englishSourceFileName) {
+        throw 'Chinese and English release-note sources must have distinct filenames.'
     }
-    $bytes = [IO.File]::ReadAllBytes($LiteralPath)
-    if ($bytes.Length -ge 3 -and
-        $bytes[0] -eq 0xEF -and
-        $bytes[1] -eq 0xBB -and
-        $bytes[2] -eq 0xBF) {
-        throw 'Release notes source must be strict UTF-8 without a BOM.'
-    }
-    $strictUtf8 = [Text.UTF8Encoding]::new($false, $true)
-    $text = $strictUtf8.GetString($bytes)
+    $sourceNavigation = "[$simplifiedChineseLabel]($chineseSourceFileName) | " +
+        "[English]($englishSourceFileName)"
     $repositoryTarget = '](../LICENSE)'
     $bundleTarget = '](LICENSE.txt)'
-    $repositoryCount = [Text.RegularExpressions.Regex]::Matches(
-        $text,
-        [Text.RegularExpressions.Regex]::Escape($repositoryTarget)).Count
-    $bundleCount = [Text.RegularExpressions.Regex]::Matches(
-        $text,
-        [Text.RegularExpressions.Regex]::Escape($bundleTarget)).Count
-    if ($repositoryCount -ne 1 -or $bundleCount -ne 0) {
-        throw 'Release notes source must contain exactly one repository LICENSE link and no bundle LICENSE link.'
+
+    $convertedSources = @()
+    foreach ($sourcePath in @($LiteralPath, $EnglishLiteralPath)) {
+        if (-not (Test-Path -LiteralPath $sourcePath -PathType Leaf)) {
+            throw "Release notes source was not found: $sourcePath"
+        }
+        $bytes = [IO.File]::ReadAllBytes($sourcePath)
+        if ($bytes.Length -ge 3 -and
+            $bytes[0] -eq 0xEF -and
+            $bytes[1] -eq 0xBB -and
+            $bytes[2] -eq 0xBF) {
+            throw 'Release notes source must be strict UTF-8 without a BOM.'
+        }
+        $strictUtf8 = [Text.UTF8Encoding]::new($false, $true)
+        $text = $strictUtf8.GetString($bytes)
+        $lines = [Text.RegularExpressions.Regex]::Split($text, '\r?\n')
+        $titleMatch = [Text.RegularExpressions.Regex]::Match(
+            $lines[0],
+            '^# (?<title>\S.*)$')
+        if ($lines.Count -lt 3 -or
+            -not $titleMatch.Success -or
+            @($lines | Where-Object { $_ -match '^# ' }).Count -ne 1) {
+            throw 'Each release-note source must contain exactly one leading level-one title.'
+        }
+        $title = [string]$titleMatch.Groups['title'].Value
+        if (@($lines | Where-Object { $_ -ceq $sourceNavigation }).Count -ne 1) {
+            throw 'Each release-note source must contain the exact reciprocal language navigation.'
+        }
+
+        $repositoryCount = [Text.RegularExpressions.Regex]::Matches(
+            $text,
+            [Text.RegularExpressions.Regex]::Escape($repositoryTarget)).Count
+        $bundleCount = [Text.RegularExpressions.Regex]::Matches(
+            $text,
+            [Text.RegularExpressions.Regex]::Escape($bundleTarget)).Count
+        if ($repositoryCount -ne 1 -or $bundleCount -ne 0) {
+            throw 'Each release-note source must contain exactly one repository LICENSE link and no bundle LICENSE link.'
+        }
+
+        $bodyLines = @($lines | Select-Object -Skip 1 | Where-Object {
+                $_ -cne $sourceNavigation
+            })
+        $body = ($bodyLines -join "`n").Trim()
+        if ([string]::IsNullOrWhiteSpace($body) -or
+            $body.Contains("]($chineseSourceFileName)") -or
+            $body.Contains("]($englishSourceFileName)")) {
+            throw 'Release-note source body must be non-empty and free of source-note links.'
+        }
+        $body = $body.Replace($repositoryTarget, $bundleTarget)
+        $body = [Text.RegularExpressions.Regex]::Replace(
+            $body,
+            '(?m)^(#{2,5})(\s)',
+            '#$1$2')
+        $convertedSources += [pscustomobject][ordered]@{
+            Title = $title
+            Body = $body
+        }
     }
 
-    return $text.Replace($repositoryTarget, $bundleTarget)
+    $internalNavigation = "[$simplifiedChineseLabel](#zh-cn) | " +
+        '[English](#english)'
+    return @(
+        "# $($convertedSources[0].Title) / $($convertedSources[1].Title)",
+        '',
+        $internalNavigation,
+        '',
+        '<a id="zh-cn"></a>',
+        '',
+        "## $simplifiedChineseLabel",
+        '',
+        $convertedSources[0].Body,
+        '',
+        '<a id="english"></a>',
+        '',
+        '## English',
+        '',
+        $convertedSources[1].Body,
+        ''
+    ) -join "`n"
 }
 
 function Assert-LemonBundleReleaseNotesLicenseLink {
@@ -125,8 +195,118 @@ function Assert-LemonBundleReleaseNotesLicenseLink {
     $bundleCount = [Text.RegularExpressions.Regex]::Matches(
         $text,
         [Text.RegularExpressions.Regex]::Escape($bundleTarget)).Count
-    if ($repositoryCount -ne 0 -or $bundleCount -ne 1) {
-        throw 'Release notes asset must link exactly once to the flat-bundle LICENSE.txt.'
+    if ($repositoryCount -ne 0 -or $bundleCount -ne 2) {
+        throw 'Bilingual release notes must link exactly twice to the flat-bundle LICENSE.txt.'
+    }
+}
+
+function Assert-LemonBundleReleaseNotesBilingualContent {
+    param(
+        [Parameter(Mandatory)][string] $LiteralPath,
+        [Parameter(Mandatory)]
+        [ValidatePattern('^\d+\.\d+\.\d+$')]
+        [string] $ExpectedVersion
+    )
+
+    if (-not (Test-Path -LiteralPath $LiteralPath -PathType Leaf)) {
+        throw "Release notes asset was not found: $LiteralPath"
+    }
+    $bytes = [IO.File]::ReadAllBytes($LiteralPath)
+    if ($bytes.Length -ge 3 -and
+        $bytes[0] -eq 0xEF -and
+        $bytes[1] -eq 0xBB -and
+        $bytes[2] -eq 0xBF) {
+        throw 'Release notes asset must be strict UTF-8 without a BOM.'
+    }
+    $strictUtf8 = [Text.UTF8Encoding]::new($false, $true)
+    $text = $strictUtf8.GetString($bytes)
+    $simplifiedChineseLabel = -join ([char[]]@(
+            0x7b80, 0x4f53, 0x4e2d, 0x6587))
+    $releaseNotesWords = -join ([char[]]@(
+            0x53d1, 0x5e03, 0x8bf4, 0x660e))
+    $internalNavigation = "[$simplifiedChineseLabel](#zh-cn) | " +
+        '[English](#english)'
+    $requiredExactLines = [string[]]@(
+        $internalNavigation,
+        '<a id="zh-cn"></a>',
+        "## $simplifiedChineseLabel",
+        '<a id="english"></a>',
+        '## English')
+    foreach ($requiredLine in $requiredExactLines) {
+        if ([Text.RegularExpressions.Regex]::Matches(
+                $text,
+                '(?m)^' + [Text.RegularExpressions.Regex]::Escape(
+                    $requiredLine) + '$').Count -ne 1) {
+            throw "Release notes asset is missing a unique bilingual marker: $requiredLine"
+        }
+    }
+    $expectedTitle = "# $productName $ExpectedVersion $releaseNotesWords / " +
+        "Lemon Serial Monitor $ExpectedVersion Release Notes"
+    if ([Text.RegularExpressions.Regex]::Matches(
+            $text,
+            '(?m)^# ').Count -ne 1 -or
+        [Text.RegularExpressions.Regex]::Matches(
+            $text,
+            '(?m)^' + [Text.RegularExpressions.Regex]::Escape(
+                $expectedTitle) + '$').Count -ne 1) {
+        throw 'Release notes asset must have the exact bilingual title for the expected version.'
+    }
+
+    $linkTargets = [string[]]@(
+        [Text.RegularExpressions.Regex]::Matches(
+            $text,
+            '\]\((?<target>[^)\r\n]+)\)') | ForEach-Object {
+            $_.Groups['target'].Value
+        })
+    $expectedLinkTargets = [string[]]@(
+        '#english',
+        '#zh-cn',
+        'LICENSE.txt',
+        'LICENSE.txt')
+    if ((@($linkTargets | Sort-Object) -join "`n") -cne
+        (@($expectedLinkTargets | Sort-Object) -join "`n") -or
+        [Text.RegularExpressions.Regex]::IsMatch(
+            $text,
+            '(?m)^[ \t]{0,3}\[[^\]\r\n]+\]:[ \t]*\S+') -or
+        [Text.RegularExpressions.Regex]::IsMatch(
+            $text,
+            '(?<!!)\[[^\]\r\n]+\]\[[^\]\r\n]*\]')) {
+        throw 'Release notes asset may link only to its two language anchors and bundled LICENSE.txt.'
+    }
+
+    $chineseIndex = $text.IndexOf("## $simplifiedChineseLabel")
+    $englishAnchorIndex = $text.IndexOf('<a id="english"></a>')
+    $englishIndex = $text.IndexOf('## English')
+    if ($chineseIndex -lt 0 -or
+        $englishAnchorIndex -le $chineseIndex -or
+        $englishIndex -le $englishAnchorIndex) {
+        throw 'Release notes language sections are missing or out of order.'
+    }
+    $chineseSection = $text.Substring(
+        $chineseIndex,
+        $englishAnchorIndex - $chineseIndex)
+    $englishSection = $text.Substring($englishIndex)
+    $bundleTargetPattern = [Text.RegularExpressions.Regex]::Escape(
+        '](LICENSE.txt)')
+    $chineseBody = $chineseSection.Substring(
+        $chineseSection.IndexOf("## $simplifiedChineseLabel") +
+            ("## $simplifiedChineseLabel").Length).TrimStart()
+    $englishBody = $englishSection.Substring(
+        $englishSection.IndexOf('## English') +
+            '## English'.Length).TrimStart()
+    if ([Text.RegularExpressions.Regex]::Matches(
+            $chineseSection,
+            $bundleTargetPattern).Count -ne 1 -or
+        [Text.RegularExpressions.Regex]::Matches(
+            $englishSection,
+            $bundleTargetPattern).Count -ne 1 -or
+        -not $chineseBody.StartsWith(
+            $ExpectedVersion + ' ',
+            [StringComparison]::Ordinal) -or
+        -not $englishBody.StartsWith(
+            'Version ' + $ExpectedVersion + ' ',
+            [StringComparison]::Ordinal)) {
+        throw 'Both release-note language sections must be complete and independently licensed.'
     }
 }
 
@@ -298,6 +478,9 @@ function Test-LemonReleaseBundle {
         -Role 'Release notes'
     Assert-LemonBundleReleaseNotesLicenseLink `
         -LiteralPath $releaseNotes.FullName
+    Assert-LemonBundleReleaseNotesBilingualContent `
+        -LiteralPath $releaseNotes.FullName `
+        -ExpectedVersion $ExpectedVersion
     $releaseLicense = Assert-LemonOrdinaryFile `
         -LiteralPath (Join-Path $RootPath $licenseFileName) `
         -Role 'Release MIT license'
@@ -495,6 +678,18 @@ if ($Create) {
     $notesSource = Assert-LemonOrdinaryFile `
         -LiteralPath ([IO.Path]::GetFullPath($ReleaseNotesPath)) `
         -Role 'Release notes source'
+    $notesSourceBaseName = [IO.Path]::GetFileNameWithoutExtension(
+        $notesSource.Name)
+    if ($notesSourceBaseName.EndsWith(
+            '.en',
+            [StringComparison]::OrdinalIgnoreCase)) {
+        throw 'ReleaseNotesPath must identify the Chinese source, not the English mirror.'
+    }
+    $englishReleaseNotesPath = Join-Path $notesSource.DirectoryName `
+        ($notesSourceBaseName + '.en.md')
+    $englishNotesSource = Assert-LemonOrdinaryFile `
+        -LiteralPath ([IO.Path]::GetFullPath($englishReleaseNotesPath)) `
+        -Role 'English release notes source'
     $compiler = Assert-LemonOrdinaryFile `
         -LiteralPath ([IO.Path]::GetFullPath($InnoCompilerPath)) `
         -Role 'Inno Setup compiler'
@@ -531,7 +726,8 @@ if ($Create) {
         Copy-Item -LiteralPath $manualSource.FullName `
             -Destination (Join-Path $stagingRoot $manualPublicFileName)
         $releaseNotesText = Convert-LemonReleaseNotesForBundle `
-            -LiteralPath $notesSource.FullName
+            -LiteralPath $notesSource.FullName `
+            -EnglishLiteralPath $englishNotesSource.FullName
         Write-LemonUtf8NoBom `
             -LiteralPath (Join-Path $stagingRoot $releaseNotesFileName) `
             -Value $releaseNotesText

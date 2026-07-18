@@ -17,6 +17,12 @@ $installerWord = ConvertFrom-TestCodePoints `
     @(0x5b89, 0x88c5, 0x7a0b, 0x5e8f)
 $manualWords = ConvertFrom-TestCodePoints `
     @(0x5b8c, 0x6574, 0x64cd, 0x4f5c, 0x624b, 0x518c)
+$simplifiedChineseLabel = ConvertFrom-TestCodePoints `
+    @(0x7b80, 0x4f53, 0x4e2d, 0x6587)
+$releaseNotesWords = ConvertFrom-TestCodePoints `
+    @(0x53d1, 0x5e03, 0x8bf4, 0x660e)
+$chineseBodyMarker = ConvertFrom-TestCodePoints `
+    @(0x4e2d, 0x6587, 0x6b63, 0x6587)
 $installerSourceFileName = $productName + '-' + $installerWord + '-x64.exe'
 $manualSourceFileName = $productName + '-' + $manualWords + '.pdf'
 $installerPublicFileName = 'LemonSerialMonitor-Setup-x64.exe'
@@ -185,13 +191,27 @@ Describe 'Lemon release bundle contract' {
 
         $utf8NoBomStrict = [Text.UTF8Encoding]::new($false, $true)
         $sourcePath = Join-Path $TestDrive 'source-notes.md'
+        $englishSourcePath = Join-Path $TestDrive 'source-notes.en.md'
+        $sourceNavigation = "[$simplifiedChineseLabel](source-notes.md) | " +
+            '[English](source-notes.en.md)'
+        $validChineseSource = "# $productName Notes`n`n" +
+            "$sourceNavigation`n`n$chineseBodyMarker`n`n[MIT](../LICENSE)`n"
+        $validEnglishSource = "# Lemon Serial Monitor Notes`n`n" +
+            "$sourceNavigation`n`nVersion 0.1.1 is ready.`n`n" +
+            '[MIT](../LICENSE)' + "`n"
         [IO.File]::WriteAllText(
             $sourcePath,
-            "# Notes`n[MIT](../LICENSE)`n",
+            $validChineseSource,
+            $utf8NoBomStrict)
+        [IO.File]::WriteAllText(
+            $englishSourcePath,
+            $validEnglishSource,
             $utf8NoBomStrict)
         $converted = Convert-LemonReleaseNotesForBundle `
-            -LiteralPath $sourcePath
-        $converted.Contains('](LICENSE.txt)') | Should Be $true
+            -LiteralPath $sourcePath `
+            -EnglishLiteralPath $englishSourcePath
+        [regex]::Matches($converted, '\]\(LICENSE\.txt\)').Count |
+            Should Be 2
         $converted.Contains('](../LICENSE)') | Should Be $false
 
         $bundlePath = Join-Path $TestDrive 'RELEASE-NOTES.md'
@@ -203,14 +223,36 @@ Describe 'Lemon release bundle contract' {
                 '# no license link',
                 '[one](../LICENSE) [two](../LICENSE)',
                 '[already packaged](LICENSE.txt)')) {
-            [IO.File]::WriteAllText($sourcePath, $invalidSource, $utf8NoBomStrict)
-            { Convert-LemonReleaseNotesForBundle -LiteralPath $sourcePath } |
-                Should Throw
+            [IO.File]::WriteAllText(
+                $sourcePath,
+                "# $productName Notes`n`n$sourceNavigation`n`n$invalidSource`n",
+                $utf8NoBomStrict)
+            { Convert-LemonReleaseNotesForBundle `
+                    -LiteralPath $sourcePath `
+                    -EnglishLiteralPath $englishSourcePath } | Should Throw
         }
+        [IO.File]::WriteAllText(
+            $sourcePath,
+            $validChineseSource,
+            $utf8NoBomStrict)
+        [IO.File]::WriteAllText(
+            $englishSourcePath,
+            "# Lemon Serial Monitor Notes`n`n$sourceNavigation`n`n" +
+                "Version 0.1.1 is ready.`n`n# extra title`n`n" +
+                '[MIT](../LICENSE)' + "`n",
+            $utf8NoBomStrict)
+        { Convert-LemonReleaseNotesForBundle `
+                -LiteralPath $sourcePath `
+                -EnglishLiteralPath $englishSourcePath } | Should Throw
+        [IO.File]::WriteAllText(
+            $englishSourcePath,
+            $validEnglishSource,
+            $utf8NoBomStrict)
         foreach ($invalidBundle in @(
                 '# no license link',
                 '[repository](../LICENSE)',
-                '[one](LICENSE.txt) [two](LICENSE.txt)')) {
+                '[only one](LICENSE.txt)',
+                '[one](LICENSE.txt) [two](LICENSE.txt) [three](LICENSE.txt)')) {
             [IO.File]::WriteAllText($bundlePath, $invalidBundle, $utf8NoBomStrict)
             { Assert-LemonBundleReleaseNotesLicenseLink `
                     -LiteralPath $bundlePath } | Should Throw
@@ -230,8 +272,22 @@ Describe 'Lemon release bundle contract' {
                 $invalidUtf8,
                 $utf16Source)) {
             [IO.File]::WriteAllBytes($sourcePath, $invalidBytes)
-            { Convert-LemonReleaseNotesForBundle -LiteralPath $sourcePath } |
-                Should Throw
+            { Convert-LemonReleaseNotesForBundle `
+                    -LiteralPath $sourcePath `
+                    -EnglishLiteralPath $englishSourcePath } | Should Throw
+        }
+        [IO.File]::WriteAllText(
+            $sourcePath,
+            $validChineseSource,
+            $utf8NoBomStrict)
+        foreach ($invalidBytes in @(
+                $sourceWithBom,
+                $invalidUtf8,
+                $utf16Source)) {
+            [IO.File]::WriteAllBytes($englishSourcePath, $invalidBytes)
+            { Convert-LemonReleaseNotesForBundle `
+                    -LiteralPath $sourcePath `
+                    -EnglishLiteralPath $englishSourcePath } | Should Throw
         }
         foreach ($invalidBytes in @(
                 $bundleWithBom,
@@ -248,12 +304,114 @@ Describe 'Lemon release bundle contract' {
         foreach ($required in @(
                 'Convert-LemonReleaseNotesForBundle `',
                 '-LiteralPath $notesSource.FullName',
+                '-EnglishLiteralPath $englishNotesSource.FullName',
                 'Assert-LemonBundleReleaseNotesLicenseLink `',
+                'Assert-LemonBundleReleaseNotesBilingualContent `',
                 '-LiteralPath $releaseNotes.FullName')) {
             $text.Contains($required) | Should Be $true
         }
         $text.Contains('Copy-Item -LiteralPath $notesSource.FullName') |
             Should Be $false
+        $text | Should Match (
+            'Assert-LemonBundleReleaseNotesBilingualContent\s+`?\s*' +
+            '-LiteralPath \$releaseNotes\.FullName\s+`?\s*' +
+            '-ExpectedVersion \$ExpectedVersion')
+    }
+
+    It 'builds one self-contained Chinese and English release-notes asset' {
+        $ast = Get-ReleaseScriptAst
+        $functions = @{}
+        foreach ($functionName in @(
+                'Convert-LemonReleaseNotesForBundle',
+                'Assert-LemonBundleReleaseNotesLicenseLink',
+                'Assert-LemonBundleReleaseNotesBilingualContent')) {
+            $matches = @($ast.FindAll({
+                        param($node)
+
+                        $node -is
+                            [Management.Automation.Language.FunctionDefinitionAst] -and
+                        $node.Name -eq $functionName
+                    }, $true))
+            $matches.Count | Should Be 1
+            if ($matches.Count -ne 1) {
+                return
+            }
+            $functions[$functionName] = $matches[0]
+            . ([scriptblock]::Create($matches[0].Extent.Text))
+        }
+
+        $utf8NoBomStrict = [Text.UTF8Encoding]::new($false, $true)
+        $chinesePath = Join-Path $TestDrive 'source-notes.md'
+        $englishPath = Join-Path $TestDrive 'source-notes.en.md'
+        $sourceNavigation = "[$simplifiedChineseLabel](source-notes.md) | " +
+            '[English](source-notes.en.md)'
+        $chineseText = "# $productName 0.1.1 $releaseNotesWords`n`n" +
+            "$sourceNavigation`n`n0.1.1 $chineseBodyMarker`n`n" +
+            "## $releaseNotesWords`n`n[MIT](../LICENSE)`n"
+        $englishText = "# Lemon Serial Monitor 0.1.1 Release Notes`n`n" +
+            "$sourceNavigation`n`n" +
+            "Version 0.1.1 is a maintenance update.`n`n" +
+            "## What Changed`n`n[MIT](../LICENSE)`n"
+        [IO.File]::WriteAllText($chinesePath, $chineseText, $utf8NoBomStrict)
+        [IO.File]::WriteAllText($englishPath, $englishText, $utf8NoBomStrict)
+
+        $converted = Convert-LemonReleaseNotesForBundle `
+            -LiteralPath $chinesePath `
+            -EnglishLiteralPath $englishPath
+        $internalNavigation = "[$simplifiedChineseLabel](#zh-cn) | " +
+            '[English](#english)'
+        $converted.Contains($internalNavigation) | Should Be $true
+        $converted.Contains("## $simplifiedChineseLabel") | Should Be $true
+        $converted.Contains('## English') | Should Be $true
+        $converted.Contains($chineseBodyMarker) | Should Be $true
+        $converted.Contains('Version 0.1.1 is a maintenance update.') |
+            Should Be $true
+        $converted.Contains('source-notes.md') | Should Be $false
+        $converted.Contains('source-notes.en.md') | Should Be $false
+        [regex]::Matches($converted, '\]\(LICENSE\.txt\)').Count |
+            Should Be 2
+
+        $bundlePath = Join-Path $TestDrive 'RELEASE-NOTES.md'
+        [IO.File]::WriteAllText($bundlePath, $converted, $utf8NoBomStrict)
+        { Assert-LemonBundleReleaseNotesLicenseLink `
+                -LiteralPath $bundlePath } | Should Not Throw
+        { Assert-LemonBundleReleaseNotesBilingualContent `
+                -LiteralPath $bundlePath `
+                -ExpectedVersion '0.1.1' } | Should Not Throw
+
+        foreach ($unpackagedLink in @(
+                '[unpackaged text](not-in-six-assets.txt)',
+                '[unpackaged manual](not-in-six-assets.pdf)',
+                "[guide][guide-ref]`n`n[guide-ref]: ../README.md")) {
+            [IO.File]::WriteAllText(
+                $bundlePath,
+                $converted + "`n$unpackagedLink`n",
+                $utf8NoBomStrict)
+            { Assert-LemonBundleReleaseNotesBilingualContent `
+                    -LiteralPath $bundlePath `
+                    -ExpectedVersion '0.1.1' } | Should Throw
+        }
+
+        $genericTitle = [regex]::Replace(
+            $converted,
+            '(?m)^# .+$',
+            '# Generic release notes',
+            1) + "`n$productName / Lemon Serial Monitor`n"
+        [IO.File]::WriteAllText(
+            $bundlePath,
+            $genericTitle,
+            $utf8NoBomStrict)
+        { Assert-LemonBundleReleaseNotesBilingualContent `
+                -LiteralPath $bundlePath `
+                -ExpectedVersion '0.1.1' } | Should Throw
+
+        [IO.File]::WriteAllText(
+            $bundlePath,
+            $converted.Replace('0.1.1', '0.1.0'),
+            $utf8NoBomStrict)
+        { Assert-LemonBundleReleaseNotesBilingualContent `
+                -LiteralPath $bundlePath `
+                -ExpectedVersion '0.1.1' } | Should Throw
     }
 
     It 'binds each build source and public asset role to its exact name' {
