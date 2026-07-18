@@ -7,7 +7,7 @@ namespace Lemon.UninstallHelper.Manifest;
 
 public static class UninstallWorkBuilder
 {
-    private const string ProductMarker = "CommMonitor:0.1.0";
+    private const string ProductMarker = "CommMonitor:0.1.1";
 
     public static byte[] Build(
         string installId,

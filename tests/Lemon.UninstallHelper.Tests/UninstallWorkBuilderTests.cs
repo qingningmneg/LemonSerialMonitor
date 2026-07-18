@@ -39,7 +39,7 @@ public sealed class UninstallWorkBuilderTests : IDisposable
         Assert.Contains(root.Objects, item =>
             item.Kind == OwnedObjectKind.ImmutableFile &&
             item.RelativePath == "nested\\配置.json" &&
-            item.ProductMarker == "CommMonitor:0.1.0");
+            item.ProductMarker == "CommMonitor:0.1.1");
     }
 
     [Fact]

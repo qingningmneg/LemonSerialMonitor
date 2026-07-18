@@ -125,7 +125,7 @@ Describe 'Lemon visible Windows metadata' {
             Should Be $true
         $aiProjectText.Contains('<Company>Lemon Serial Monitor</Company>') |
             Should Be $true
-        $aiProjectText.Contains('<FileVersion>0.1.0.0</FileVersion>') |
+        $aiProjectText.Contains('<FileVersion>0.1.1.0</FileVersion>') |
             Should Be $true
         $helperProjectText.Contains("<Product>$helperTitle</Product>") |
             Should Be $true
@@ -133,7 +133,7 @@ Describe 'Lemon visible Windows metadata' {
             Should Be $true
         $helperProjectText.Contains('<Company>Lemon Serial Monitor</Company>') |
             Should Be $true
-        $helperProjectText.Contains('<FileVersion>0.1.0.0</FileVersion>') |
+        $helperProjectText.Contains('<FileVersion>0.1.1.0</FileVersion>') |
             Should Be $true
     }
 }

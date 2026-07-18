@@ -12,9 +12,9 @@
     <AssemblyTitle>Lemon串口监控卸载组件</AssemblyTitle>
     <Description>Lemon串口监控安全卸载组件</Description>
     <Company>Lemon Serial Monitor</Company>
-    <Version>0.1.0</Version>
-    <FileVersion>0.1.0.0</FileVersion>
-    <InformationalVersion>0.1.0</InformationalVersion>
+    <Version>0.1.1</Version>
+    <FileVersion>0.1.1.0</FileVersion>
+    <InformationalVersion>0.1.1</InformationalVersion>
     <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
   </PropertyGroup>
   <ItemGroup>

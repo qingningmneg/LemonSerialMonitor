@@ -15,7 +15,7 @@ Import-Module (Join-Path $PSScriptRoot 'CommMonitor.InstallHelpers.psm1') -Force
 Import-Module (Join-Path $PSScriptRoot 'Lemon.Platform.psm1') -Force
 Import-Module (Join-Path $PSScriptRoot 'Lemon.SetupTransactions.psm1') -Force
 
-$productVersion = '0.1.0'
+$productVersion = '0.1.1'
 $filterName = 'CommMonitorFilter'
 $kernelServiceName = 'CommMonitorFilter'
 $userServiceName = 'CommMonitorService'

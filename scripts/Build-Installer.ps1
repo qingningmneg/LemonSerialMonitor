@@ -16,6 +16,9 @@ $ErrorActionPreference = 'Stop'
 $requiredInnoVersion = '6.7.3'
 $wingetPackageId = 'JRSoftware.InnoSetup'
 $repoRoot = [IO.Path]::GetFullPath((Split-Path -Parent $PSScriptRoot))
+$productVersion = '0.1.1'
+$releaseNotesPath = Join-Path $repoRoot `
+    "docs\RELEASE_NOTES_$productVersion.md"
 $payloadRoot = Join-Path $repoRoot 'artifacts\phase1'
 $outputRoot = Join-Path $repoRoot 'artifacts\installer'
 $innoScript = Join-Path $repoRoot 'installer\LemonSerialMonitor.iss'
@@ -213,20 +216,20 @@ if (-not $SkipSigning) {
             }
 
             & (Join-Path $PSScriptRoot 'Test-ReleaseBundle.ps1') `
-                -Version '0.1.0' `
+                -Version $productVersion `
                 -Create `
                 -InstallerPath $installerPath `
                 -ManualPath (Join-Path $payloadRoot `
                     'manual\Lemon串口监控-完整操作手册.pdf') `
-                -ReleaseNotesPath (Join-Path $repoRoot `
-                    'docs\RELEASE_NOTES_0.1.0.md') `
+                -ReleaseNotesPath $releaseNotesPath `
                 -InnoCompilerPath $compiler `
                 -ExpectedSignerThumbprint $thumbprint
             if ($LASTEXITCODE -ne 0) {
                 throw "Test-ReleaseBundle.ps1 failed with exit code $LASTEXITCODE."
             }
-            $releaseBundlePath = Join-Path $repoRoot `
-                'artifacts\release\0.1.0'
+            $releaseBundlePath = Join-Path `
+                (Join-Path $repoRoot 'artifacts\release') `
+                $productVersion
         }
         finally {
             if ($publisherAdded) {

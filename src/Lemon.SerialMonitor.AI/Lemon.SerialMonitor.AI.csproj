@@ -12,9 +12,9 @@
     <AssemblyTitle>Lemon串口监控 AI 接口</AssemblyTitle>
     <Description>用于读取和控制 Lemon 串口监控会话的本机 AI 接口</Description>
     <Company>Lemon Serial Monitor</Company>
-    <Version>0.1.0</Version>
-    <FileVersion>0.1.0.0</FileVersion>
-    <InformationalVersion>0.1.0</InformationalVersion>
+    <Version>0.1.1</Version>
+    <FileVersion>0.1.1.0</FileVersion>
+    <InformationalVersion>0.1.1</InformationalVersion>
     <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>

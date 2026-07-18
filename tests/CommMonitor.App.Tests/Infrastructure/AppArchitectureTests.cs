@@ -25,15 +25,15 @@ public sealed class AppArchitectureTests
             "\u4E0D\u5360\u7528\u4E32\u53E3\u7684\u4E32\u53E3\u901A\u4FE1\u76D1\u63A7\u5DE5\u5177",
             assembly.GetCustomAttribute<AssemblyDescriptionAttribute>()?.Description);
         Assert.Equal(
-            "0.1.0",
+            "0.1.1",
             assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?
                 .InformationalVersion);
 
         FileVersionInfo versionInfo = FileVersionInfo.GetVersionInfo(assembly.Location);
         Assert.Equal("Lemon\u4E32\u53E3\u76D1\u63A7", versionInfo.ProductName);
         Assert.Equal("Lemon\u4E32\u53E3\u76D1\u63A7", versionInfo.FileDescription);
-        Assert.Equal("0.1.0.0", versionInfo.FileVersion);
-        Assert.Equal("0.1.0", versionInfo.ProductVersion);
+        Assert.Equal("0.1.1.0", versionInfo.FileVersion);
+        Assert.Equal("0.1.1", versionInfo.ProductVersion);
     }
 
     [Fact]

@@ -275,8 +275,8 @@ function Assert-LemonPublishedMetadata {
         [Parameter(Mandatory)][string] $ProductName,
         [Parameter(Mandatory)][string] $FileDescription,
         [Parameter(Mandatory)][string] $CompanyName,
-        [string] $FileVersion = '0.1.0.0',
-        [string] $ProductVersion = '0.1.0'
+        [string] $FileVersion = '0.1.1.0',
+        [string] $ProductVersion = '0.1.1'
     )
 
     $normalizedPath = [IO.Path]::GetFullPath($FilePath)
@@ -522,7 +522,7 @@ foreach ($documentName in @(
         'AI_API_REFERENCE.md',
         'BUILD.md',
         'SECURITY.md',
-        'RELEASE_NOTES_0.1.0.md')) {
+        'RELEASE_NOTES_0.1.1.md')) {
     $documentPath = Join-Path (Join-Path $repoRoot 'docs') $documentName
     if (-not (Test-Path -LiteralPath $documentPath -PathType Leaf)) {
         throw "Required public document was not found: $documentPath"

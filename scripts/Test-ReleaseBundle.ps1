@@ -1,7 +1,7 @@
 ﻿[CmdletBinding()]
 param(
     [ValidatePattern('^\d+\.\d+\.\d+$')]
-    [string] $Version = '0.1.0',
+    [string] $Version = '0.1.1',
 
     [switch] $Create,
 
@@ -345,7 +345,7 @@ if ($Create) {
     }
     if ([string]::IsNullOrWhiteSpace($ReleaseNotesPath)) {
         $ReleaseNotesPath = Join-Path $repoRoot `
-            'docs\RELEASE_NOTES_0.1.0.md'
+            "docs\RELEASE_NOTES_$Version.md"
     }
     if ([string]::IsNullOrWhiteSpace($LicensePath)) {
         $LicensePath = Join-Path $repoRoot 'LICENSE'

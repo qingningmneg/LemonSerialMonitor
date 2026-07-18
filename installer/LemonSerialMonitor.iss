@@ -1,13 +1,13 @@
 #define ProductName "Lemon串口监控"
-#define ProductVersion "0.1.0"
+#define ProductVersion "0.1.1"
 #define ProductAppId "{F5B0783F-74F4-4058-90D1-5A4ACC4254A7}"
 #define PayloadRoot "..\artifacts\phase1"
 
 [Setup]
 AppId={{F5B0783F-74F4-4058-90D1-5A4ACC4254A7}
 AppName=Lemon串口监控
-AppVersion=0.1.0
-AppVerName=Lemon串口监控 0.1.0
+AppVersion={#ProductVersion}
+AppVerName={#ProductName} {#ProductVersion}
 AppPublisher=qingningmneg
 AppPublisherURL=https://github.com/qingningmneg/LemonSerialMonitor
 AppSupportURL=https://github.com/qingningmneg/LemonSerialMonitor/issues
@@ -40,9 +40,9 @@ DisableWelcomePage=no
 DisableReadyPage=no
 DisableFinishedPage=no
 AllowNoIcons=yes
-VersionInfoVersion=0.1.0.0
+VersionInfoVersion={#ProductVersion}.0
 VersionInfoProductName=Lemon串口监控
-VersionInfoProductVersion=0.1.0
+VersionInfoProductVersion={#ProductVersion}
 VersionInfoDescription=Lemon串口监控安装程序
 VersionInfoCompany=qingningmneg
 VersionInfoCopyright=Copyright (C) 2026 qingningmneg

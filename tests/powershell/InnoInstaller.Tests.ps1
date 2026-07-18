@@ -77,7 +77,7 @@ Describe 'Lemon graphical installer contract' {
         foreach ($required in @(
                 'AppId={{F5B0783F-74F4-4058-90D1-5A4ACC4254A7}',
                 ('AppName=' + $productName),
-                'AppVersion=0.1.0',
+                'AppVersion={#ProductVersion}',
                 'PrivilegesRequired=admin',
                 'ArchitecturesAllowed=x64compatible',
                 'ArchitecturesInstallIn64BitMode=x64compatible',

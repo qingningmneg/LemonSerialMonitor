@@ -142,7 +142,7 @@ Describe 'CommMonitor package completeness' {
                 'AI_API_REFERENCE.md',
                 'BUILD.md',
                 'SECURITY.md',
-                'RELEASE_NOTES_0.1.0.md')) {
+                'RELEASE_NOTES_0.1.1.md')) {
             $localBuildText.Contains("'$documentName'") | Should Be $true
         }
         $manualPrefix = 'Lemon' + (-join ([char[]]@(
