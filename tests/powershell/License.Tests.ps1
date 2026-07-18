@@ -2,6 +2,7 @@
 
 $repoRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 $licensePath = Join-Path $repoRoot 'LICENSE'
+$manualBuilderPath = Join-Path $repoRoot 'scripts\docs\build_commmonitor_manual.py'
 $buildAllPath = Join-Path $repoRoot 'scripts\Build-All.ps1'
 $buildInstallerPath = Join-Path $repoRoot 'scripts\Build-Installer.ps1'
 $chineseReadmePath = Join-Path $repoRoot 'README.md'
@@ -406,6 +407,21 @@ Describe 'MIT license distribution contract' {
                 'to use, copy, modify, merge, publish, distribute, sublicense, and/or sell',
                 'The above copyright notice and this permission notice shall be included')) {
             $license.Contains($requiredText) | Should Be $true
+        }
+    }
+
+    It 'embeds the canonical MIT terms in the standalone manual' {
+        $builder = Get-RequiredUtf8Content -Path $manualBuilderPath
+        if ($null -eq $builder) { return }
+        foreach ($requiredText in @(
+                'LICENSE_PATH = ROOT / "LICENSE"',
+                '开源与署名',
+                '允许商业使用和盈利',
+                'Copyright (c) 2026 qingningmneg',
+                '附录：MIT License',
+                'license_text = LICENSE_PATH.read_text(encoding="utf-8")',
+                'The above copyright notice and this permission notice shall be included')) {
+            $builder.Contains($requiredText) | Should Be $true
         }
     }
 

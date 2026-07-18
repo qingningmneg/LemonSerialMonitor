@@ -18,6 +18,7 @@ from docx.shared import Inches, Pt, RGBColor
 ROOT = Path(__file__).resolve().parents[2]
 OUTPUT_DIR = ROOT / "artifacts" / "manual"
 OUTPUT_PATH = OUTPUT_DIR / "Lemon串口监控-完整操作手册.docx"
+LICENSE_PATH = ROOT / "LICENSE"
 
 PAGE_WIDTH = Inches(8.5)
 PAGE_HEIGHT = Inches(11)
@@ -173,8 +174,11 @@ def configure_document(doc: Document) -> None:
     doc.core_properties.comments = "Lemon串口监控 0.1.1 完整操作手册"
     doc.core_properties.created = datetime(2026, 7, 15, tzinfo=timezone.utc)
     doc.core_properties.modified = datetime(2026, 7, 18, tzinfo=timezone.utc)
-    doc.core_properties.revision = 2
-    doc.core_properties.keywords = "串口,监控,Windows,AI,MCP"
+    doc.core_properties.revision = 3
+    doc.core_properties.keywords = (
+        "串口,监控,Windows,AI,MCP,Lemon Serial Monitor,serial monitor,COM port,"
+        "serial sniffer,open source,MIT"
+    )
 
 
 def normalize_extended_properties(path: Path, page_count: int) -> None:
@@ -500,6 +504,35 @@ def add_page_break(doc: Document) -> None:
     paragraph.add_run().add_break(WD_BREAK.PAGE)
 
 
+def add_canonical_license_appendix(doc: Document) -> None:
+    license_text = LICENSE_PATH.read_text(encoding="utf-8")
+    if license_text.startswith("\ufeff"):
+        raise RuntimeError("canonical LICENSE must be UTF-8 without BOM")
+    for required in (
+        "MIT License",
+        "Copyright (c) 2026 qingningmneg",
+        "The above copyright notice and this permission notice shall be included",
+        "THE SOFTWARE IS PROVIDED \"AS IS\"",
+    ):
+        if required not in license_text:
+            raise RuntimeError(f"canonical LICENSE is missing: {required}")
+
+    add_page_break(doc)
+    add_heading(doc, "附录：MIT License", 1)
+    add_paragraph(
+        doc,
+        "以下为仓库根目录 LICENSE 的完整规范文本；安装目录中的副本位于 docs\\LICENSE.txt。",
+    )
+    for block in license_text.strip().split("\n\n"):
+        paragraph = doc.add_paragraph()
+        paragraph.paragraph_format.space_after = Pt(8)
+        paragraph.paragraph_format.line_spacing = 1.08
+        for index, line in enumerate(block.splitlines()):
+            if index:
+                paragraph.add_run().add_break()
+            set_run_font(paragraph.add_run(line), size=9.5, color=INK)
+
+
 def add_cover(doc: Document) -> None:
     spacer = doc.add_paragraph()
     spacer.paragraph_format.space_after = Pt(88)
@@ -547,6 +580,12 @@ def build_document() -> Document:
             ["彻底卸载", "第 14 章：备份、完整卸载和重启续办"],
         ],
         [2500, 6860],
+    )
+    add_callout(
+        doc,
+        "开源与署名",
+        "本软件按 MIT 许可证开源，允许免费使用、修改、分发、商业使用和盈利。复制或分发本软件或其实质部分时，必须保留 Copyright (c) 2026 qingningmneg 版权声明和 MIT 许可声明。完整条款见手册末尾附录或安装目录 docs\\LICENSE.txt。",
+        "note",
     )
     add_callout(
         doc,
@@ -1072,6 +1111,7 @@ def build_document() -> Document:
         "任何监控界面都不能替代原发送端和接收端日志。做故障定责、协议验证或无损验收时，应同时保留双方原始日志、会话/导出、状态输出和文件哈希。",
         "note",
     )
+    add_canonical_license_appendix(doc)
 
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     doc.save(OUTPUT_PATH)
@@ -1132,6 +1172,12 @@ def audit_document(path: Path) -> dict[str, object]:
         )
     required = (
         "Lemon串口监控",
+        "开源与署名",
+        "允许商业使用和盈利",
+        "MIT License",
+        "Copyright (c) 2026 qingningmneg",
+        "The above copyright notice and this permission notice shall be included",
+        "THE SOFTWARE IS PROVIDED \"AS IS\"",
         "八种复制格式",
         "MCP",
         "完整卸载",

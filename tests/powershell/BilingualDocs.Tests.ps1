@@ -483,7 +483,7 @@ Describe 'Version 0.1.1 bilingual release documentation contract' {
                 'doc.core_properties.modified = ' +
                     'datetime(2026, 7, 18, tzinfo=timezone.utc)'))
         $builder | Should Match (
-            [regex]::Escape('doc.core_properties.revision = 2'))
+            [regex]::Escape('doc.core_properties.revision = 3'))
         $builder | Should Match '0\.1\.1 驱动使用本地测试证书'
         $builder | Should Match '0\.1\.1 不支持在已有新式安装上原地覆盖'
         $builder | Should Match '0\.1\.1[^\r\n]*没有新增[^\r\n]*Server[^\r\n]*驱动[^\r\n]*端到端验收'
