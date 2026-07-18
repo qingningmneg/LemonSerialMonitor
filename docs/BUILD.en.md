@@ -82,10 +82,10 @@ Output:
 
 ```text
 artifacts\installer\Lemon串口监控-安装程序-x64.exe
-artifacts\release\0.1.0\
+artifacts\release\0.1.1\
 ```
 
-`artifacts\release\0.1.0` contains only six files that can be uploaded publicly: the installer, PDF user manual, release notes, build information, `LICENSE.txt`, and the SHA-256 manifest. `LICENSE.txt` is the project MIT license and can be read before installation; `SHA256SUMS.txt` covers the other five assets, excluding itself. The build script verifies the exact Inno Setup version and its official Authenticode publisher and rejects substitutes from unknown compilers. By default, it also locally test-signs the installer and, after assembly, rechecks the six files, version resources, signing certificate, and every hash for the five assets listed in the manifest.
+`artifacts\release\0.1.1` contains only six files that can be uploaded publicly: the installer, PDF user manual, release notes, build information, `LICENSE.txt`, and the SHA-256 manifest. `LICENSE.txt` is the project MIT license and can be read before installation; `SHA256SUMS.txt` covers the other five assets, excluding itself. The build script verifies the exact Inno Setup version and its official Authenticode publisher and rejects substitutes from unknown compilers. By default, it also locally test-signs the installer and, after assembly, rechecks the six files, version resources, signing certificate, and every hash for the five assets listed in the manifest.
 
 The installation wizard uses the project's pinned Simplified Chinese translation file. Its source, commit, SHA-256, and MIT license are recorded in `installer\third-party\SOURCE.md` and the license file in the same directory.
 
@@ -94,7 +94,7 @@ If a release directory already exists, you can verify it independently again:
 ```powershell
 powershell.exe -NoProfile -ExecutionPolicy Bypass `
   -File .\scripts\Test-ReleaseBundle.ps1 `
-  -Version 0.1.0
+  -Version 0.1.1
 ```
 
 On successful verification, the script outputs `Status: Verified`, the installer SHA-256, the signing-certificate fingerprint, and the file count. Verification fails if any file is added, missing, or modified in the directory.

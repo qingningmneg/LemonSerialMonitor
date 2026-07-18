@@ -82,10 +82,10 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass `
 
 ```text
 artifacts\installer\Lemon串口监控-安装程序-x64.exe
-artifacts\release\0.1.0\
+artifacts\release\0.1.1\
 ```
 
-`artifacts\release\0.1.0` 只包含六个可以公开上传的文件：安装程序、PDF 操作手册、发布说明、构建信息、`LICENSE.txt` 和 SHA-256 清单。`LICENSE.txt` 是安装前就能查看的项目 MIT 许可证；`SHA256SUMS.txt` 覆盖除它自身以外的另外五个资产。构建脚本会核对 Inno Setup 精确版本和官方 Authenticode 发布者，不接受未知编译器替代品；还会签名安装程序并在组装后重新核对六个文件、版本资源、签名证书和清单中五个资产的全部哈希。
+`artifacts\release\0.1.1` 只包含六个可以公开上传的文件：安装程序、PDF 操作手册、发布说明、构建信息、`LICENSE.txt` 和 SHA-256 清单。`LICENSE.txt` 是安装前就能查看的项目 MIT 许可证；`SHA256SUMS.txt` 覆盖除它自身以外的另外五个资产。构建脚本会核对 Inno Setup 精确版本和官方 Authenticode 发布者，不接受未知编译器替代品；还会签名安装程序并在组装后重新核对六个文件、版本资源、签名证书和清单中五个资产的全部哈希。
 
 安装向导使用项目内固定版本的简体中文翻译文件。来源、提交号、SHA-256 和 MIT 许可证分别记录在 `installer\third-party\SOURCE.md` 与同目录许可证文件中。
 
@@ -94,7 +94,7 @@ artifacts\release\0.1.0\
 ```powershell
 powershell.exe -NoProfile -ExecutionPolicy Bypass `
   -File .\scripts\Test-ReleaseBundle.ps1 `
-  -Version 0.1.0
+  -Version 0.1.1
 ```
 
 验证成功时会输出 `Status: Verified`、安装程序 SHA-256、签名证书指纹和文件数量；目录多出、缺少或被修改任何文件都会失败。

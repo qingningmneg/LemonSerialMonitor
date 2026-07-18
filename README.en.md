@@ -6,7 +6,7 @@
 
 I built Lemon Serial Monitor (Lemon串口监控) as a free and open-source Windows x64 serial-port monitor for inspecting communication that has already occurred while changing as little as possible about how the original software uses the port. It works as a COM-port sniffer: a kernel filter driver copies existing read and write events without opening the COM port in the desktop application, so the original application remains the port's actual user. The WPF UI, CLI, and MCP interfaces support interactive inspection, automation, and AI-assisted debugging.
 
-The current version is `0.1.0` and is licensed under [MIT](LICENSE). Personal and commercial use, modification, redistribution, sublicensing, and sale are permitted. If you distribute copies or substantial portions of the software, you must retain the copyright and license notice.
+The current version is `0.1.1` and is licensed under [MIT](LICENSE). Personal and commercial use, modification, redistribution, sublicensing, and sale are permitted. If you distribute copies or substantial portions of the software, you must retain the copyright and license notice.
 
 **[Download `LemonSerialMonitor-Setup-x64.exe` directly](https://github.com/qingningmneg/LemonSerialMonitor/releases/latest/download/LemonSerialMonitor-Setup-x64.exe)**
 
@@ -30,9 +30,9 @@ You do not need to open PowerShell to install it:
 
 The current driver uses a local test certificate; it is not signed with Microsoft production signing. Setup verifies the installation package, imports the bundled public-key certificate, and may enable Windows `TESTSIGNING` when required. It does not disable Secure Boot or modify BitLocker. Setup stops when Secure Boot is enabled.
 
-The test certificate cannot be imported until setup has administrator permission, so Windows may still show SmartScreen or “Unknown publisher” when you first double-click the installer. The 0.1.0 release files are locally test-signed, but they have no Microsoft trust chain and no RFC 3161 public timestamp. Download them only from this project's Release and verify `SHA256SUMS.txt` first.
+The test certificate cannot be imported until setup has administrator permission, so Windows may still show SmartScreen or “Unknown publisher” when you first double-click the installer. The 0.1.1 release files are locally test-signed, but they have no Microsoft trust chain and no RFC 3161 public timestamp. Download them only from this project's Release and verify `SHA256SUMS.txt` first.
 
-Version 0.1.0 does not support overwriting an existing installation made by the current installer. Before updating, stop monitoring and back up your data, perform a full uninstall with the old version, restart if prompted, and then install the new version.
+Version 0.1.1 does not support overwriting an existing installation made by the current installer. Before updating, stop monitoring and back up your data, perform a full uninstall with the old version, restart if prompted, and then install the new version.
 
 See [Installation and uninstall](docs/INSTALL.en.md) for the complete instructions.
 
@@ -48,9 +48,9 @@ The complete operating manual is available in Simplified Chinese: [PDF manual (S
 
 Server Core does not install the WPF desktop application. It installs only the driver, background service, AI/command-line interfaces, and documentation. Setup rejects x86, ARM64, unknown Windows Server builds, and environments where Secure Boot is enabled.
 
-The current 0.1.0 code candidate completed graphical installation, restart, service cold start, desktop connection, JSON CLI, and MCP checks on a physical Windows 11 x64 system. The candidate validation chain also completed a full uninstall of the previous candidate and a clean installation of the current code candidate. When no serial device is attached, the background service remains running. After you click **Refresh Ports** (`刷新端口`), an empty port list and a temporarily unavailable driver are normal; attach a real device and refresh again.
+The 0.1.0 historical baseline on a physical Windows 11 x64 system completed graphical installation, restart, service cold start, desktop connection, JSON CLI, and MCP checks. That candidate validation chain also completed a full uninstall of the previous candidate and a clean installation of the 0.1.0 code candidate. When no serial device is attached, the background service remains running. After you click **Refresh Ports** (`刷新端口`), an empty port list and a temporarily unavailable driver are normal; attach a real device and refresh again. This is historical 0.1.0 evidence, not a new 0.1.1 acceptance result.
 
-GitHub-hosted desktop runners for Windows Server 2022/2025 completed platform detection, managed tests, and installation-contract checks, but did not load the kernel driver. Server Core received component-layout contract tests only, and the Server 2019 self-hosted job was not run. No physical or virtual Server system received end-to-end acceptance testing for driver installation, restart, capture, AI, and uninstall in this release. These versions are compatibility targets, not hardware certification. See the [0.1.0 release notes](docs/RELEASE_NOTES_0.1.0.en.md) for the exact scope.
+In the 0.1.0 historical baseline, GitHub-hosted desktop runners for Windows Server 2022/2025 completed platform detection, managed tests, and installation-contract checks, but did not load the kernel driver. Server Core received component-layout contract tests only, and the Server 2019 self-hosted job was not run. Version 0.1.1 adds no end-to-end acceptance testing for driver installation, restart, capture, AI, and uninstall on a physical or virtual Server system. These versions are compatibility targets, not hardware certification. See the [0.1.1 release notes](docs/RELEASE_NOTES_0.1.1.en.md) for the exact scope.
 
 ## How it differs from a conventional serial terminal or assistant
 
@@ -131,7 +131,7 @@ Start a full uninstall from **Settings → Apps → Installed apps**, select **L
 
 The repository already contains the validated DOCX/PDF manuals required to build the installer. Building from source also requires Visual Studio 2022, the WDK, Spectre libraries, the .NET SDK, Pester, and Inno Setup 6.7.3. See [Build instructions](docs/BUILD.en.md) for the build, signing, test, and installer commands.
 
-See [Security](docs/SECURITY.en.md) for the security boundaries and threat model, and the [0.1.0 release notes](docs/RELEASE_NOTES_0.1.0.en.md) for version changes.
+See [Security](docs/SECURITY.en.md) for the security boundaries and threat model, and the [0.1.1 release notes](docs/RELEASE_NOTES_0.1.1.en.md) for version changes.
 
 ## Open-source license
 

@@ -170,10 +170,10 @@ def configure_document(doc: Document) -> None:
     doc.core_properties.subject = "安装、串口监控、复制、导出、AI 接入与完整卸载"
     doc.core_properties.author = "Lemon串口监控"
     doc.core_properties.last_modified_by = "Lemon串口监控"
-    doc.core_properties.comments = "Lemon串口监控 0.1.0 完整操作手册"
+    doc.core_properties.comments = "Lemon串口监控 0.1.1 完整操作手册"
     doc.core_properties.created = datetime(2026, 7, 15, tzinfo=timezone.utc)
-    doc.core_properties.modified = datetime(2026, 7, 15, tzinfo=timezone.utc)
-    doc.core_properties.revision = 1
+    doc.core_properties.modified = datetime(2026, 7, 18, tzinfo=timezone.utc)
+    doc.core_properties.revision = 2
     doc.core_properties.keywords = "串口,监控,Windows,AI,MCP"
 
 
@@ -194,7 +194,7 @@ def normalize_extended_properties(path: Path, page_count: int) -> None:
                 root = ET.fromstring(data)
                 values = {
                     "Application": "Lemon串口监控",
-                    "AppVersion": "0.1.0",
+                    "AppVersion": "0.1.1",
                     "Company": "Lemon串口监控",
                     "Pages": str(page_count),
                 }
@@ -351,6 +351,13 @@ def set_repeat_header(row) -> None:
     trpr.append(marker)
 
 
+def set_cant_split(row) -> None:
+    trpr = row._tr.get_or_add_trPr()
+    marker = OxmlElement("w:cantSplit")
+    marker.set(qn("w:val"), "true")
+    trpr.append(marker)
+
+
 def set_table_geometry(table, widths: list[int]) -> None:
     if sum(widths) != TABLE_WIDTH_DXA:
         raise ValueError(f"table widths must total {TABLE_WIDTH_DXA}: {widths}")
@@ -407,6 +414,7 @@ def add_table(doc: Document, headers: list[str], rows: list[list[str]], widths: 
     set_repeat_header(table.rows[0])
     for values in rows:
         row = table.add_row()
+        set_cant_split(row)
         for index, value in enumerate(values):
             cell = row.cells[index]
             cell.text = ""
@@ -498,7 +506,7 @@ def add_cover(doc: Document) -> None:
     kicker = doc.add_paragraph()
     kicker.alignment = WD_ALIGN_PARAGRAPH.CENTER
     kicker.paragraph_format.space_after = Pt(18)
-    set_run_font(kicker.add_run("WINDOWS 串口被动监控  |  0.1.0"), size=10, bold=True, color=BLUE)
+    set_run_font(kicker.add_run("WINDOWS 串口被动监控  |  0.1.1"), size=10, bold=True, color=BLUE)
     doc.add_paragraph("Lemon串口监控", style="Title")
     doc.add_paragraph("完整操作手册", style="Subtitle")
     description = doc.add_paragraph()
@@ -516,7 +524,7 @@ def add_cover(doc: Document) -> None:
     set_run_font(metadata.add_run("兼容目标：Windows 10/11 x64，Windows Server 2019/2022/2025 x64"), size=9.5, color=MUTED)
     metadata2 = doc.add_paragraph()
     metadata2.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    set_run_font(metadata2.add_run("文档版本：0.1.0  |  2026-07-15"), size=9.5, color=MUTED)
+    set_run_font(metadata2.add_run("文档版本：0.1.1  |  2026-07-18"), size=9.5, color=MUTED)
 
 
 def build_document() -> Document:
@@ -594,7 +602,7 @@ def build_document() -> Document:
     add_heading(doc, "2.1 测试证书和 TESTSIGNING", 2)
     add_paragraph(
         doc,
-        "0.1.0 驱动使用本地测试证书，不是微软正式发布签名。安装向导会展示完整协议，只有勾选接受后才能继续。安装包不包含证书私钥。",
+        "0.1.1 驱动使用本地测试证书，不是微软正式发布签名。安装向导会展示完整协议，只有勾选接受后才能继续。安装包不包含证书私钥。",
     )
     for item in (
         "安装程序把随包公钥精确导入 LocalMachine Root 和 TrustedPublisher。",
@@ -935,7 +943,7 @@ def build_document() -> Document:
     add_callout(
         doc,
         "验证范围",
-        "Windows Server 2022/2025 只完成 GitHub 托管桌面 runner 的平台、托管测试和安装契约检查，未装载内核驱动；Server Core 只有布局契约测试，Server 2019 自托管任务未执行。0.1.0 没有任何 Server 驱动端到端实测，重要环境必须先在同版本测试机完成全流程验证。",
+        "0.1.0 是现有 Windows Server 自动化与契约验证的历史基线：Windows Server 2022/2025 只完成 GitHub 托管桌面 runner 的平台、托管测试和安装契约检查，未装载内核驱动；Server Core 只有布局契约测试，Server 2019 自托管任务未执行。0.1.1 没有新增任何 Windows Server 内核驱动端到端验收，重要环境必须先在同版本测试机完成全流程验证。",
         "caution",
     )
 
@@ -957,7 +965,7 @@ def build_document() -> Document:
             "安装新版本并再次重启/验证。",
         ]
     )
-    add_paragraph(doc, "0.1.0 不支持在已有新式安装上原地覆盖。不要直接覆盖正在加载的 SYS、后台服务 EXE 或受保护安装记录。")
+    add_paragraph(doc, "0.1.1 不支持在已有新式安装上原地覆盖。不要直接覆盖正在加载的 SYS、后台服务 EXE 或受保护安装记录。")
 
     add_heading(doc, "13. 常见故障", 1)
     add_table(
@@ -1100,6 +1108,12 @@ def audit_document(path: Path) -> dict[str, object]:
             raise RuntimeError(f"table {table_index} indent mismatch")
         if layout is None or layout.get(qn("w:type")) != "fixed":
             raise RuntimeError(f"table {table_index} is not fixed layout")
+        for row_index, row in enumerate(table.rows[1:], start=2):
+            trpr = row._tr.get_or_add_trPr()
+            if trpr.find(qn("w:cantSplit")) is None:
+                raise RuntimeError(
+                    f"table {table_index} row {row_index} may split across pages"
+                )
 
     title = next((p for p in reopened.paragraphs if p.style.name == "Title"), None)
     if title is None or title.text != "Lemon串口监控":
@@ -1127,6 +1141,7 @@ def audit_document(path: Path) -> dict[str, object]:
         "后台服务仍应保持运行",
         "不支持在已有新式安装上原地覆盖",
         "Server 2019 自托管任务未执行",
+        "0.1.1 没有新增任何 Windows Server 内核驱动端到端验收",
         "卸载程序会先关闭本软件桌面程序",
     )
     for phrase in required:

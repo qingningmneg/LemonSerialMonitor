@@ -1,4 +1,4 @@
-$ErrorActionPreference = 'Stop'
+﻿$ErrorActionPreference = 'Stop'
 
 $repoRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 $guardPath = Join-Path $repoRoot 'scripts\Test-BilingualDocs.ps1'
@@ -15,6 +15,7 @@ $docPairs = [ordered]@{
     'docs/SECURITY.md' = 'docs/SECURITY.en.md'
     'docs/BUILD.md' = 'docs/BUILD.en.md'
     'docs/RELEASE_NOTES_0.1.0.md' = 'docs/RELEASE_NOTES_0.1.0.en.md'
+    'docs/RELEASE_NOTES_0.1.1.md' = 'docs/RELEASE_NOTES_0.1.1.en.md'
 }
 
 $safetyTerms = @(
@@ -105,6 +106,20 @@ function Get-BilingualGuardError {
     return $null
 }
 
+function Get-RepositoryDocumentText {
+    param([Parameter(Mandatory)][string] $RelativePath)
+
+    return [IO.File]::ReadAllText((Join-Path $script:repoRoot $RelativePath))
+}
+
+function Get-RepositoryDocumentLines {
+    param([Parameter(Mandatory)][string] $RelativePath)
+
+    $fullPath = Join-Path $script:repoRoot $RelativePath
+    (Test-Path -LiteralPath $fullPath -PathType Leaf) | Should Be $true
+    return @([IO.File]::ReadAllLines($fullPath))
+}
+
 $missingRealMirrors = @(
     foreach ($englishRelativePath in $docPairs.Values) {
         if (-not (Test-Path `
@@ -116,14 +131,22 @@ $missingRealMirrors = @(
 )
 
 Describe 'Bilingual documentation guard' {
-    It 'accepts all nine complete bilingual document pairs' {
+    It 'defines exactly ten pairs including both release-note versions' {
+        $docPairs.Count | Should Be 10
+        $docPairs['docs/RELEASE_NOTES_0.1.0.md'] |
+            Should Be 'docs/RELEASE_NOTES_0.1.0.en.md'
+        $docPairs['docs/RELEASE_NOTES_0.1.1.md'] |
+            Should Be 'docs/RELEASE_NOTES_0.1.1.en.md'
+    }
+
+    It 'accepts all ten complete bilingual document pairs' {
         $root = Join-Path $TestDrive 'complete'
         New-BilingualDocsFixture -Root $root
 
         $output = Invoke-TestBilingualGuard -Root $root
 
         ($output -join [Environment]::NewLine) |
-            Should Be 'BILINGUAL_DOCS_OK=9'
+            Should Be 'BILINGUAL_DOCS_OK=10'
     }
 
     It 'rejects a missing English mirror' {
@@ -134,6 +157,18 @@ Describe 'Bilingual documentation guard' {
         $message = Get-BilingualGuardError -Root $root
 
         $message | Should Match 'README\.en\.md'
+        $message | Should Match 'not found'
+    }
+
+    It 'rejects a missing 0.1.1 English release-note mirror by exact path' {
+        $root = Join-Path $TestDrive 'missing-0-1-1-release-note-mirror'
+        New-BilingualDocsFixture -Root $root
+        Remove-Item -LiteralPath (
+            Join-Path $root 'docs\RELEASE_NOTES_0.1.1.en.md')
+
+        $message = Get-BilingualGuardError -Root $root
+
+        $message | Should Match 'docs[\\/]RELEASE_NOTES_0\.1\.1\.en\.md'
         $message | Should Match 'not found'
     }
 
@@ -257,7 +292,7 @@ Describe 'Bilingual documentation guard' {
         $output = @(& $fixtureGuard)
 
         ($output -join [Environment]::NewLine) |
-            Should Be 'BILINGUAL_DOCS_OK=9'
+            Should Be 'BILINGUAL_DOCS_OK=10'
     }
 
     It 'runs after the visible-brand step in the GitHub workflow' {
@@ -282,6 +317,208 @@ Describe 'Bilingual documentation guard' {
         $output = @(& $guardPath)
 
         ($output -join [Environment]::NewLine) |
-            Should Be 'BILINGUAL_DOCS_OK=9'
+            Should Be 'BILINGUAL_DOCS_OK=10'
+    }
+}
+
+Describe 'Version 0.1.1 bilingual release documentation contract' {
+    It 'pins the exact 0.1.1 heading and reciprocal link in <RelativePath>' `
+            -TestCases @(
+        @{
+            RelativePath = 'docs/RELEASE_NOTES_0.1.1.md'
+            Heading = '# Lemon串口监控 0.1.1 发布说明'
+        },
+        @{
+            RelativePath = 'docs/RELEASE_NOTES_0.1.1.en.md'
+            Heading = '# Lemon Serial Monitor 0.1.1 Release Notes'
+        }
+    ) {
+        param([string] $RelativePath, [string] $Heading)
+
+        $lines = Get-RepositoryDocumentLines -RelativePath $RelativePath
+
+        [string]::Equals($lines[0], $Heading, [StringComparison]::Ordinal) |
+            Should Be $true
+        [string]::Equals($lines[1], '', [StringComparison]::Ordinal) |
+            Should Be $true
+        [string]::Equals(
+            $lines[2],
+            '[简体中文](RELEASE_NOTES_0.1.1.md) | ' +
+                '[English](RELEASE_NOTES_0.1.1.en.md)',
+            [StringComparison]::Ordinal) | Should Be $true
+    }
+
+    It 'declares 0.1.1 current and links matching release notes in <RelativePath>' `
+            -TestCases @(
+        @{
+            RelativePath = 'README.md'
+            CurrentPattern = '当前版本为 `0\.1\.1`'
+            LinkPattern = '\[0\.1\.1 发布说明\]\(docs/RELEASE_NOTES_0\.1\.1\.md\)'
+        },
+        @{
+            RelativePath = 'README.en.md'
+            CurrentPattern = 'The current version is `0\.1\.1`'
+            LinkPattern = '\[0\.1\.1 release notes\]\(docs/RELEASE_NOTES_0\.1\.1\.en\.md\)'
+        }
+    ) {
+        param(
+            [string] $RelativePath,
+            [string] $CurrentPattern,
+            [string] $LinkPattern
+        )
+
+        $text = Get-RepositoryDocumentText -RelativePath $RelativePath
+
+        $text | Should Match $CurrentPattern
+        $text | Should Match $LinkPattern
+    }
+
+    It 'labels Windows 11 physical acceptance as historical 0.1.0 evidence in <RelativePath>' `
+            -TestCases @(
+        @{
+            RelativePath = 'README.md'
+            HistoricalPattern = '0\.1\.0 历史基线[^\r\n]*Windows 11 x64 实机'
+            ForbiddenCurrentPattern = '0\.1\.1[^\r\n]*Windows 11 x64 实机[^\r\n]*(?:完成|验收)'
+        },
+        @{
+            RelativePath = 'README.en.md'
+            HistoricalPattern = '0\.1\.0 historical baseline[^\r\n]*physical Windows 11 x64'
+            ForbiddenCurrentPattern = '0\.1\.1[^\r\n]*physical Windows 11 x64[^\r\n]*(?:completed|acceptance)'
+        }
+    ) {
+        param(
+            [string] $RelativePath,
+            [string] $HistoricalPattern,
+            [string] $ForbiddenCurrentPattern
+        )
+
+        $text = Get-RepositoryDocumentText -RelativePath $RelativePath
+
+        $text | Should Match $HistoricalPattern
+        $text | Should Not Match $ForbiddenCurrentPattern
+    }
+
+    It 'pins the 0.1.1 six-asset and five-hash build contract in <RelativePath>' `
+            -TestCases @(
+        @{
+            RelativePath = 'docs/BUILD.md'
+            SixAssetPattern = '只包含六个可以公开上传的文件'
+            FiveHashPattern = 'SHA256SUMS\.txt[^\r\n]*覆盖[^\r\n]*另外五个资产'
+        },
+        @{
+            RelativePath = 'docs/BUILD.en.md'
+            SixAssetPattern = 'contains only six files that can be uploaded publicly'
+            FiveHashPattern = 'SHA256SUMS\.txt[^\r\n]*covers[^\r\n]*other five assets'
+        }
+    ) {
+        param(
+            [string] $RelativePath,
+            [string] $SixAssetPattern,
+            [string] $FiveHashPattern
+        )
+
+        $text = Get-RepositoryDocumentText -RelativePath $RelativePath
+
+        $text | Should Match ([regex]::Escape('artifacts\release\0.1.1'))
+        $text | Should Match ([regex]::Escape('-Version 0.1.1'))
+        $text | Should Match $SixAssetPattern
+        $text | Should Match $FiveHashPattern
+    }
+
+    It 'identifies the current 0.1.1 local test-signed release in <RelativePath>' `
+            -TestCases @(
+        @{
+            RelativePath = 'docs/INSTALL.md'
+            Pattern = '0\.1\.1 的安装文件使用本地测试签名'
+        },
+        @{
+            RelativePath = 'docs/INSTALL.en.md'
+            Pattern = 'The 0\.1\.1 installation files use local test signing'
+        },
+        @{
+            RelativePath = 'docs/SECURITY.md'
+            Pattern = '0\.1\.1 使用本地测试证书'
+        },
+        @{
+            RelativePath = 'docs/SECURITY.en.md'
+            Pattern = 'Version 0\.1\.1 uses a local test certificate'
+        }
+    ) {
+        param([string] $RelativePath, [string] $Pattern)
+
+        Get-RepositoryDocumentText -RelativePath $RelativePath |
+            Should Match $Pattern
+    }
+
+    It 'preserves the historical 0.1.0 Server evidence in <RelativePath>' `
+            -TestCases @(
+        @{
+            RelativePath = 'docs/INSTALL.md'
+            Pattern = '0\.1\.0 发布前[^\r\n]*没有任何 Server 实机或虚拟机'
+        },
+        @{
+            RelativePath = 'docs/INSTALL.en.md'
+            Pattern = 'Before the 0\.1\.0 release[^\r\n]*no physical or virtual Server system'
+        }
+    ) {
+        param([string] $RelativePath, [string] $Pattern)
+
+        Get-RepositoryDocumentText -RelativePath $RelativePath |
+            Should Match $Pattern
+    }
+
+    It 'pins manual metadata, publication date, and 0.1.1 Server evidence boundary' {
+        $builder = Get-RepositoryDocumentText `
+            -RelativePath 'scripts/docs/build_commmonitor_manual.py'
+
+        $builder | Should Match (
+            [regex]::Escape(
+                'doc.core_properties.comments = ' +
+                    '"Lemon串口监控 0.1.1 完整操作手册"'))
+        $builder | Should Match ([regex]::Escape('"AppVersion": "0.1.1"'))
+        $builder | Should Match ([regex]::Escape('WINDOWS 串口被动监控  |  0.1.1'))
+        $builder | Should Match ([regex]::Escape('文档版本：0.1.1  |  2026-07-18'))
+        $builder | Should Match (
+            [regex]::Escape(
+                'doc.core_properties.modified = ' +
+                    'datetime(2026, 7, 18, tzinfo=timezone.utc)'))
+        $builder | Should Match (
+            [regex]::Escape('doc.core_properties.revision = 2'))
+        $builder | Should Match '0\.1\.1 驱动使用本地测试证书'
+        $builder | Should Match '0\.1\.1 不支持在已有新式安装上原地覆盖'
+        $builder | Should Match '0\.1\.1[^\r\n]*没有新增[^\r\n]*Server[^\r\n]*驱动[^\r\n]*端到端验收'
+    }
+
+    It 'prevents manual table data rows from splitting across pages' {
+        $builder = Get-RepositoryDocumentText `
+            -RelativePath 'scripts/docs/build_commmonitor_manual.py'
+
+        $builder | Should Match 'def set_cant_split\(row\)'
+        $builder | Should Match ([regex]::Escape('OxmlElement("w:cantSplit")'))
+        $builder | Should Match ([regex]::Escape('set_cant_split(row)'))
+    }
+
+    It 'preserves the exact historical 0.1.0 heading and link in <RelativePath>' `
+            -TestCases @(
+        @{
+            RelativePath = 'docs/RELEASE_NOTES_0.1.0.md'
+            Heading = '# Lemon串口监控 0.1.0 发布说明'
+        },
+        @{
+            RelativePath = 'docs/RELEASE_NOTES_0.1.0.en.md'
+            Heading = '# Lemon Serial Monitor 0.1.0 Release Notes'
+        }
+    ) {
+        param([string] $RelativePath, [string] $Heading)
+
+        $lines = Get-RepositoryDocumentLines -RelativePath $RelativePath
+
+        [string]::Equals($lines[0], $Heading, [StringComparison]::Ordinal) |
+            Should Be $true
+        [string]::Equals(
+            $lines[2],
+            '[简体中文](RELEASE_NOTES_0.1.0.md) | ' +
+                '[English](RELEASE_NOTES_0.1.0.en.md)',
+            [StringComparison]::Ordinal) | Should Be $true
     }
 }

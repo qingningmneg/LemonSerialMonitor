@@ -21,7 +21,7 @@ Installation requires local administrator privileges. The driver currently uses 
 
 Setup does not disable Secure Boot, suspend or modify BitLocker, or use `nointegritychecks` to bypass Windows security mechanisms.
 
-The 0.1.0 installation files use local test signing and have no Microsoft trust chain and no RFC 3161 public timestamp. The test certificate cannot be imported until setup has obtained administrator privileges, so the first run may still show SmartScreen or **Unknown publisher** (`未知发布者`); this is not production code signing. Download only from this project's Release and verify the SHA-256.
+The 0.1.1 installation files use local test signing and have no Microsoft trust chain and no RFC 3161 public timestamp. The test certificate cannot be imported until setup has obtained administrator privileges, so the first run may still show SmartScreen or **Unknown publisher** (`未知发布者`); this is not production code signing. Download only from this project's Release and verify the SHA-256.
 
 ## Verify After Downloading
 
@@ -120,7 +120,7 @@ Pay particular attention to the platform, Secure Boot, `TESTSIGNING`, test certi
 
 ## Updating During Normal Use
 
-The current 0.1.0 installer does not perform an in-place overwrite of an existing modern installation. When a new version is released:
+The current 0.1.1 installer does not perform an in-place overwrite of an existing modern installation. When a new version is released:
 
 1. **Stop** (`停止`) monitoring.
 2. Export or back up the data you need to retain.

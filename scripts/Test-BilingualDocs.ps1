@@ -1,4 +1,4 @@
-[CmdletBinding()]
+﻿[CmdletBinding()]
 param(
     [string] $RepositoryRoot
 )
@@ -20,6 +20,7 @@ $pairs = [ordered]@{
     'docs/SECURITY.md' = 'docs/SECURITY.en.md'
     'docs/BUILD.md' = 'docs/BUILD.en.md'
     'docs/RELEASE_NOTES_0.1.0.md' = 'docs/RELEASE_NOTES_0.1.0.en.md'
+    'docs/RELEASE_NOTES_0.1.1.md' = 'docs/RELEASE_NOTES_0.1.1.en.md'
 }
 
 $requiredSafetyTerms = @(

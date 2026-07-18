@@ -10,7 +10,7 @@ The software's monitoring function is read-only: it does not actively send, inje
 
 ## Local Test Signing
 
-Version 0.1.0 uses a local test certificate; it is not Microsoft WHQL, Attestation, or production signing:
+Version 0.1.1 uses a local test certificate; it is not Microsoft WHQL, Attestation, or production signing:
 
 - The installer carries only the public `.cer` certificate, not the private key.
 - The test certificate private key on the build machine is marked non-exportable.
@@ -21,7 +21,7 @@ Version 0.1.0 uses a local test certificate; it is not Microsoft WHQL, Attestati
 
 Installation stops when Secure Boot is enabled. The software does not disable Secure Boot, modify BitLocker, or bypass code integrity.
 
-The 0.1.0 release files have no Microsoft trust chain and no RFC 3161 public timestamp. When Setup is first run, the test certificate has not yet been imported, so Windows may still show SmartScreen or "Unknown publisher". Local test signing is not a substitute for production release signing. After downloading, first verify the file against `SHA256SUMS.txt` from the Release; verify the certificate fingerprint against `BUILD-INFO.json` from the same build.
+The 0.1.1 release files have no Microsoft trust chain and no RFC 3161 public timestamp. When Setup is first run, the test certificate has not yet been imported, so Windows may still show SmartScreen or "Unknown publisher". Local test signing is not a substitute for production release signing. After downloading, first verify the file against `SHA256SUMS.txt` from the Release; verify the certificate fingerprint against `BUILD-INFO.json` from the same build.
 
 ## Privileged Files
 
