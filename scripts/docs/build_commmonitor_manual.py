@@ -26,7 +26,7 @@ MARGIN = Inches(1)
 HEADER_FOOTER_DISTANCE = Inches(0.492)
 TABLE_WIDTH_DXA = 9360
 TABLE_INDENT_DXA = 120
-EXPECTED_RENDERED_PAGE_COUNT = 15
+EXPECTED_RENDERED_PAGE_COUNT = 16
 
 BLUE = "2E74B5"
 DARK_BLUE = "1F4D78"
@@ -584,7 +584,7 @@ def build_document() -> Document:
     add_callout(
         doc,
         "开源与署名",
-        "本软件按 MIT 许可证开源，允许免费使用、修改、分发、商业使用和盈利。复制或分发本软件或其实质部分时，必须保留 Copyright (c) 2026 qingningmneg 版权声明和 MIT 许可声明。完整条款见手册末尾附录或安装目录 docs\\LICENSE.txt。",
+        "本软件按 MIT 许可证开源，允许免费使用、修改和分发；允许商业使用和盈利。复制或分发本软件或其实质部分时，必须保留 Copyright (c) 2026 qingningmneg 版权声明和 MIT 许可声明。完整条款见手册末尾附录或安装目录 docs\\LICENSE.txt。",
         "note",
     )
     add_callout(
@@ -1091,7 +1091,6 @@ def build_document() -> Document:
         [2100, 7260],
     )
 
-    add_page_break(doc)
     add_heading(doc, "16. 最终检查清单", 1)
     for item in (
         "□ 安装包来自正式发布页，SHA-256 一致。",

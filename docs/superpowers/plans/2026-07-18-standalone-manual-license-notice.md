@@ -123,6 +123,8 @@ git commit -m "docs: embed MIT license in standalone manual"
 ### Task 2: Regenerate and visually verify the manual
 
 **Files:**
+- Modify: `scripts/docs/build_commmonitor_manual.py`
+- Modify: `docs/superpowers/plans/2026-07-18-standalone-manual-license-notice.md`
 - Modify: `manual/Lemon串口监控-完整操作手册.docx`
 - Modify: `manual/Lemon串口监控-完整操作手册.pdf`
 - Generated QA only: `artifacts/manual/`, `artifacts/manual-render/`
@@ -139,7 +141,7 @@ $python = 'C:\Users\Admin\.cache\codex-runtimes\codex-primary-runtime\dependenci
 if ($LASTEXITCODE) { throw 'Manual generator failed.' }
 ```
 
-Set `EXPECTED_RENDERED_PAGE_COUNT = 16`, regenerate, and require the structural audit to report `PASS` with `Pages=16`.
+Set `EXPECTED_RENDERED_PAGE_COUNT = 16`, regenerate, and require the structural audit to report `PASS` with `Pages=16`. Visual QA found that the first render contained a mostly empty seventeenth-page layout because a naturally split table was immediately followed by a redundant forced page break. Removing only that break keeps the sixteen operating sections intact, lets the checklist use the available page space, and leaves the canonical MIT appendix on its own final page.
 
 - [ ] **Step 2: Render the DOCX to PDF and PNGs**
 
@@ -172,7 +174,7 @@ Run `License.Tests.ps1`, `BilingualDocs.Tests.ps1`, `Package.Tests.ps1`, and `Re
 - [ ] **Step 7: Commit the verified artifacts**
 
 ```powershell
-git add -- manual scripts/docs/build_commmonitor_manual.py tests/powershell/License.Tests.ps1 tests/powershell/BilingualDocs.Tests.ps1
+git add -- manual scripts/docs/build_commmonitor_manual.py docs/superpowers/plans/2026-07-18-standalone-manual-license-notice.md tests/powershell/License.Tests.ps1 tests/powershell/BilingualDocs.Tests.ps1
 git commit -m "docs: publish self-contained licensed manual"
 ```
 
