@@ -22,6 +22,18 @@ function Get-RequiredUtf8Content {
     return Get-Content -Raw -LiteralPath $Path -Encoding UTF8
 }
 
+function Get-ReadmeFrontMatter {
+    param([Parameter(Mandatory)][string] $Content)
+
+    $firstSection = [Text.RegularExpressions.Regex]::Match(
+        $Content,
+        '(?m)^## ')
+    if (-not $firstSection.Success) {
+        return $Content
+    }
+    return $Content.Substring(0, $firstSection.Index)
+}
+
 function Get-JoinedPathVariableName {
     param(
         [Parameter(Mandatory)]
@@ -713,7 +725,8 @@ Describe 'MIT license distribution contract' {
         foreach ($requiredText in @(
                 'MIT',
                 '商业使用',
-                '保留版权声明和许可证')) {
+                'Copyright (c) 2026 qingningmneg',
+                'MIT 许可声明')) {
             $readme.Contains($requiredText) | Should Be $true
         }
     }
@@ -727,8 +740,75 @@ Describe 'MIT license distribution contract' {
         foreach ($requiredText in @(
                 'MIT',
                 'commercial use',
-                'retain the copyright and license notice')) {
+                'Copyright (c) 2026 qingningmneg',
+                'MIT permission notice')) {
             $readme.Contains($requiredText) | Should Be $true
+        }
+    }
+
+    It 'keeps searchable MIT serial-monitor terms in the Chinese README front matter' {
+        $readme = Get-RequiredUtf8Content -Path $chineseReadmePath
+        if ($null -eq $readme) {
+            return
+        }
+        $frontMatter = Get-ReadmeFrontMatter -Content $readme
+
+        foreach ($requiredText in @(
+                'MIT',
+                '商业使用',
+                'Windows x64',
+                'Windows Server 2019/2022/2025 x64',
+                '串口监控',
+                'COM 端口监控',
+                'COM 端口抓包',
+                '串口嗅探',
+                '串口通信分析',
+                'CLI',
+                'MCP',
+                'AI 辅助软硬件调试',
+                'Copyright (c) 2026 qingningmneg',
+                'MIT 许可声明')) {
+            $frontMatter.Contains($requiredText) | Should Be $true
+        }
+        foreach ($forbiddenText in @(
+                '个人使用免费',
+                '仅限个人使用',
+                '非商业')) {
+            $readme.Contains($forbiddenText) | Should Be $false
+        }
+    }
+
+    It 'keeps searchable MIT serial-monitor terms in the English README front matter' {
+        $readme = Get-RequiredUtf8Content -Path $englishReadmePath
+        if ($null -eq $readme) {
+            return
+        }
+        $frontMatter = Get-ReadmeFrontMatter -Content $readme
+
+        foreach ($requiredText in @(
+                'MIT-licensed',
+                'open-source',
+                'commercial use',
+                'Windows x64',
+                'Windows Server 2019/2022/2025 x64',
+                'serial-port monitor',
+                'COM-port monitor',
+                'serial sniffer',
+                'COM-port capture',
+                'serial traffic analysis',
+                'CLI',
+                'MCP',
+                'AI-assisted hardware/software debugging',
+                'Copyright (c) 2026 qingningmneg',
+                'MIT permission notice')) {
+            $frontMatter.Contains($requiredText) | Should Be $true
+        }
+        foreach ($forbiddenText in @(
+                'free for personal use',
+                'personal use only',
+                'noncommercial')) {
+            $readme.ToLowerInvariant().Contains($forbiddenText) |
+                Should Be $false
         }
     }
 

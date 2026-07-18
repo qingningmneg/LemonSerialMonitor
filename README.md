@@ -4,9 +4,9 @@
 
 [![最新版本](https://img.shields.io/github/v/release/qingningmneg/LemonSerialMonitor?display_name=tag&sort=semver&label=release)](https://github.com/qingningmneg/LemonSerialMonitor/releases/latest) [![总下载量](https://img.shields.io/github/downloads/qingningmneg/LemonSerialMonitor/total?label=downloads)](https://github.com/qingningmneg/LemonSerialMonitor/releases) [![MIT 许可证](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE) [![Windows x64](https://img.shields.io/badge/Windows-x64-0078D4?logo=windows&logoColor=white)](#兼容目标系统)
 
-我做这款免费开源的 Windows x64 串口监控工具，是想查看已经发生的通信，同时尽量不改变原软件的串口使用方式。它可用于 COM 端口抓包和串口嗅探：内核过滤驱动复制现有的读写事件，桌面程序本身不打开 COM 端口，因此原业务程序仍然是端口的实际使用者；WPF 界面、CLI 和 MCP 则分别用于人工查看、脚本接入和 AI 辅助调试。
+我做 Lemon串口监控（Lemon Serial Monitor），就是想有一款 MIT 开源、允许商业使用的 Windows x64 只读串口监控和 COM 端口监控工具，用来做 COM 端口抓包、串口嗅探和串口通信分析。内核过滤驱动只复制已经发生的读、写和控制事件，桌面程序本身不打开、也不占用被监控的 COM 端口；WPF 界面、CLI 和 MCP 可用于人工查看、自动化和 AI 辅助软硬件调试。兼容目标包括 Windows 10/11 x64 和 Windows Server 2019/2022/2025 x64；Server Core 只安装无界面组件，具体验证边界见下文。
 
-当前版本为 `0.1.1`，采用 [MIT](LICENSE) 许可证。个人使用和商业使用，以及修改、再分发、再许可和销售均获允许；分发本软件的副本或实质性部分时，必须保留版权声明和许可证中的许可声明。
+当前版本为 `0.1.1`，采用 [MIT](LICENSE) 许可证。个人使用、商业使用及盈利，以及修改、再分发、再许可和销售均获允许；分发本软件的副本或实质性部分时，必须保留 `Copyright (c) 2026 qingningmneg` 和 MIT 许可声明。
 
 **[直接下载 `LemonSerialMonitor-Setup-x64.exe`](https://github.com/qingningmneg/LemonSerialMonitor/releases/latest/download/LemonSerialMonitor-Setup-x64.exe)**
 
