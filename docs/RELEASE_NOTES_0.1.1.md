@@ -16,8 +16,8 @@
 
 每个 0.1.1 公开发布目录只包含以下六个普通文件：
 
-1. `Lemon串口监控-安装程序-x64.exe`
-2. `Lemon串口监控-完整操作手册.pdf`
+1. `LemonSerialMonitor-Setup-x64.exe`
+2. `LemonSerialMonitor-User-Manual-zh-CN.pdf`
 3. `RELEASE-NOTES.md`
 4. `BUILD-INFO.json`
 5. `LICENSE.txt`

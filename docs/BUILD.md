@@ -85,7 +85,16 @@ artifacts\installer\Lemon串口监控-安装程序-x64.exe
 artifacts\release\0.1.1\
 ```
 
-`artifacts\release\0.1.1` 只包含六个可以公开上传的文件：安装程序、PDF 操作手册、发布说明、构建信息、`LICENSE.txt` 和 SHA-256 清单。`LICENSE.txt` 是安装前就能查看的项目 MIT 许可证；`SHA256SUMS.txt` 覆盖除它自身以外的另外五个资产。构建脚本会核对 Inno Setup 精确版本和官方 Authenticode 发布者，不接受未知编译器替代品；还会签名安装程序并在组装后重新核对六个文件、版本资源、签名证书和清单中五个资产的全部哈希。
+`artifacts\installer\Lemon串口监控-安装程序-x64.exe` 是本地构建源文件名；`artifacts\release\0.1.1` 中的公开下载名与它分离，只包含六个可以公开上传的文件：
+
+1. `LemonSerialMonitor-Setup-x64.exe`
+2. `LemonSerialMonitor-User-Manual-zh-CN.pdf`
+3. `RELEASE-NOTES.md`
+4. `BUILD-INFO.json`
+5. `LICENSE.txt`
+6. `SHA256SUMS.txt`
+
+`LICENSE.txt` 是安装前就能查看的项目 MIT 许可证；`SHA256SUMS.txt` 覆盖除它自身以外的另外五个资产。构建脚本会核对 Inno Setup 精确版本和官方 Authenticode 发布者，不接受未知编译器替代品；还会签名安装程序并在组装后重新核对六个文件、版本资源、签名证书和清单中五个资产的全部哈希。
 
 安装向导使用项目内固定版本的简体中文翻译文件。来源、提交号、SHA-256 和 MIT 许可证分别记录在 `installer\third-party\SOURCE.md` 与同目录许可证文件中。
 

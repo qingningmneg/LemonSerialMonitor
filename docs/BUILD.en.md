@@ -85,7 +85,16 @@ artifacts\installer\Lemon串口监控-安装程序-x64.exe
 artifacts\release\0.1.1\
 ```
 
-`artifacts\release\0.1.1` contains only six files that can be uploaded publicly: the installer, PDF user manual, release notes, build information, `LICENSE.txt`, and the SHA-256 manifest. `LICENSE.txt` is the project MIT license and can be read before installation; `SHA256SUMS.txt` covers the other five assets, excluding itself. The build script verifies the exact Inno Setup version and its official Authenticode publisher and rejects substitutes from unknown compilers. By default, it also locally test-signs the installer and, after assembly, rechecks the six files, version resources, signing certificate, and every hash for the five assets listed in the manifest.
+`artifacts\installer\Lemon串口监控-安装程序-x64.exe` is the local build-source filename. Public download names in `artifacts\release\0.1.1` are separate; the directory contains only six files that can be uploaded publicly:
+
+1. `LemonSerialMonitor-Setup-x64.exe`
+2. `LemonSerialMonitor-User-Manual-zh-CN.pdf`
+3. `RELEASE-NOTES.md`
+4. `BUILD-INFO.json`
+5. `LICENSE.txt`
+6. `SHA256SUMS.txt`
+
+`LICENSE.txt` is the project MIT license and can be read before installation; `SHA256SUMS.txt` covers the other five assets, excluding itself. The build script verifies the exact Inno Setup version and its official Authenticode publisher and rejects substitutes from unknown compilers. By default, it also locally test-signs the installer and, after assembly, rechecks the six files, version resources, signing certificate, and every hash for the five assets listed in the manifest.
 
 The installation wizard uses the project's pinned Simplified Chinese translation file. Its source, commit, SHA-256, and MIT license are recorded in `installer\third-party\SOURCE.md` and the license file in the same directory.
 

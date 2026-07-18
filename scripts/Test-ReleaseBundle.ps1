@@ -37,17 +37,20 @@ $installerWord = -join ([char[]]@(
 $manualWords = -join ([char[]]@(
         0x5b8c, 0x6574, 0x64cd, 0x4f5c, 0x624b, 0x518c))
 
-# Public output names: Lemon串口监控-安装程序-x64.exe and
-# Lemon串口监控-完整操作手册.pdf.
-$installerFileName = $productName + '-' + $installerWord + '-x64.exe'
-$manualFileName = $productName + '-' + $manualWords + '.pdf'
+# Build-source names remain aligned with the existing installer/manual artifacts.
+$installerSourceFileName = $productName + '-' + $installerWord + '-x64.exe'
+$manualSourceFileName = $productName + '-' + $manualWords + '.pdf'
+
+# Public asset names are stable ASCII names used by GitHub Release downloads.
+$installerPublicFileName = 'LemonSerialMonitor-Setup-x64.exe'
+$manualPublicFileName = 'LemonSerialMonitor-User-Manual-zh-CN.pdf'
 $releaseNotesFileName = 'RELEASE-NOTES.md'
 $buildInfoFileName = 'BUILD-INFO.json'
 $licenseFileName = 'LICENSE.txt'
 $manifestFileName = 'SHA256SUMS.txt'
 $expectedAssetNames = [string[]]@(
-    $installerFileName,
-    $manualFileName,
+    $installerPublicFileName,
+    $manualPublicFileName,
     $releaseNotesFileName,
     $buildInfoFileName,
     $licenseFileName,
@@ -195,10 +198,10 @@ function Test-LemonReleaseBundle {
     }
 
     $installer = Assert-LemonOrdinaryFile `
-        -LiteralPath (Join-Path $RootPath $installerFileName) `
+        -LiteralPath (Join-Path $RootPath $installerPublicFileName) `
         -Role 'Installer'
     $manual = Assert-LemonOrdinaryFile `
-        -LiteralPath (Join-Path $RootPath $manualFileName) `
+        -LiteralPath (Join-Path $RootPath $manualPublicFileName) `
         -Role 'PDF manual'
     $releaseNotes = Assert-LemonOrdinaryFile `
         -LiteralPath (Join-Path $RootPath $releaseNotesFileName) `
@@ -295,8 +298,8 @@ function Test-LemonReleaseBundle {
         $manifestEntries[$Matches.name] = $Matches.hash
     }
     $hashedAssetNames = [string[]]@(
-        $installerFileName,
-        $manualFileName,
+        $installerPublicFileName,
+        $manualPublicFileName,
         $releaseNotesFileName,
         $buildInfoFileName,
         $licenseFileName)
@@ -318,7 +321,7 @@ function Test-LemonReleaseBundle {
         Status = 'Verified'
         ProductVersion = $ExpectedVersion
         BundleRoot = [IO.Path]::GetFullPath($RootPath)
-        InstallerSha256 = [string]$manifestEntries[$installerFileName]
+        InstallerSha256 = [string]$manifestEntries[$installerPublicFileName]
         InstallerSignerThumbprint = $actualThumbprint
         AssetCount = $expectedAssetNames.Count
     }
@@ -337,11 +340,11 @@ if (-not $OutputRoot.StartsWith(
 if ($Create) {
     if ([string]::IsNullOrWhiteSpace($InstallerPath)) {
         $InstallerPath = Join-Path (Join-Path $artifactsRoot 'installer') `
-            $installerFileName
+            $installerSourceFileName
     }
     if ([string]::IsNullOrWhiteSpace($ManualPath)) {
         $ManualPath = Join-Path (Join-Path $artifactsRoot 'manual') `
-            $manualFileName
+            $manualSourceFileName
     }
     if ([string]::IsNullOrWhiteSpace($ReleaseNotesPath)) {
         $ReleaseNotesPath = Join-Path $repoRoot `
@@ -403,9 +406,9 @@ if ($Create) {
     [void][IO.Directory]::CreateDirectory($stagingRoot)
     try {
         Copy-Item -LiteralPath $installerSource.FullName `
-            -Destination (Join-Path $stagingRoot $installerFileName)
+            -Destination (Join-Path $stagingRoot $installerPublicFileName)
         Copy-Item -LiteralPath $manualSource.FullName `
-            -Destination (Join-Path $stagingRoot $manualFileName)
+            -Destination (Join-Path $stagingRoot $manualPublicFileName)
         Copy-Item -LiteralPath $notesSource.FullName `
             -Destination (Join-Path $stagingRoot $releaseNotesFileName)
         Copy-Item -LiteralPath $licenseSource.FullName `
@@ -440,8 +443,8 @@ if ($Create) {
             -Value (($buildInfo | ConvertTo-Json -Depth 6) + "`n")
 
         $hashedAssetNames = [string[]]@(
-            $installerFileName,
-            $manualFileName,
+            $installerPublicFileName,
+            $manualPublicFileName,
             $releaseNotesFileName,
             $buildInfoFileName,
             $licenseFileName)

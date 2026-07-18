@@ -17,6 +17,10 @@ $installerWord = ConvertFrom-TestCodePoints `
     @(0x5b89, 0x88c5, 0x7a0b, 0x5e8f)
 $manualWords = ConvertFrom-TestCodePoints `
     @(0x5b8c, 0x6574, 0x64cd, 0x4f5c, 0x624b, 0x518c)
+$installerSourceFileName = $productName + '-' + $installerWord + '-x64.exe'
+$manualSourceFileName = $productName + '-' + $manualWords + '.pdf'
+$installerPublicFileName = 'LemonSerialMonitor-Setup-x64.exe'
+$manualPublicFileName = 'LemonSerialMonitor-User-Manual-zh-CN.pdf'
 
 function Get-ReleaseScriptAst {
     $tokens = $null
@@ -97,8 +101,8 @@ Describe 'Lemon release bundle contract' {
         }
         $text = Get-Content -Raw -LiteralPath $releaseScriptPath -Encoding UTF8
         foreach ($required in @(
-                ($productName + '-' + $installerWord + '-x64.exe'),
-                ($productName + '-' + $manualWords + '.pdf'),
+                $installerPublicFileName,
+                $manualPublicFileName,
                 'RELEASE-NOTES.md',
                 'BUILD-INFO.json',
                 'LICENSE.txt',
@@ -126,12 +130,99 @@ Describe 'Lemon release bundle contract' {
             $members = @(Get-ReleaseArrayMemberNames `
                     -Assignment $assignments[0])
             ($members -join "`n") | Should Be (@(
-                    'installerFileName',
-                    'manualFileName',
+                    'installerPublicFileName',
+                    'manualPublicFileName',
                     'releaseNotesFileName',
                     'buildInfoFileName',
                     'licenseFileName',
                     'manifestFileName') -join "`n")
+        }
+    }
+
+    It 'separates Chinese build source names from English public asset names' {
+        $text = Get-Content -Raw -LiteralPath $releaseScriptPath -Encoding UTF8
+
+        foreach ($required in @(
+                '$installerSourceFileName = $productName + ''-'' + $installerWord + ''-x64.exe''',
+                '$manualSourceFileName = $productName + ''-'' + $manualWords + ''.pdf''',
+                '$installerSourceFileName',
+                '$manualSourceFileName',
+                '$installerPublicFileName',
+                '$manualPublicFileName',
+                '$InstallerPath = Join-Path (Join-Path $artifactsRoot ''installer'')',
+                '$installerSourceFileName',
+                '$ManualPath = Join-Path (Join-Path $artifactsRoot ''manual'')',
+                '$manualSourceFileName',
+                '-Destination (Join-Path $stagingRoot $installerPublicFileName)',
+                '-Destination (Join-Path $stagingRoot $manualPublicFileName)')) {
+            if (-not $text.Contains($required)) {
+                throw "Release script is missing a source/public name boundary: $required"
+            }
+        }
+    }
+
+    It 'keeps stable README download URLs aligned with the public installer name' {
+        foreach ($relativePath in @('README.md', 'README.en.md')) {
+            $readmePath = Join-Path $repoRoot $relativePath
+            $text = Get-Content -Raw -LiteralPath $readmePath -Encoding UTF8
+            $match = [regex]::Match(
+                $text,
+                'https://github\.com/qingningmneg/LemonSerialMonitor/' +
+                    'releases/latest/download/(?<name>[^)\s]+)')
+
+            $match.Success | Should Be $true
+            $match.Groups['name'].Value | Should Be $installerPublicFileName
+        }
+    }
+
+    It 'documents exact public asset names while retaining Chinese build sources' {
+        $expectedAssets = [string[]]@(
+            $installerPublicFileName,
+            $manualPublicFileName,
+            'RELEASE-NOTES.md',
+            'BUILD-INFO.json',
+            'LICENSE.txt',
+            'SHA256SUMS.txt')
+        foreach ($relativePath in @(
+                'docs/BUILD.md',
+                'docs/BUILD.en.md',
+                'docs/RELEASE_NOTES_0.1.1.md',
+                'docs/RELEASE_NOTES_0.1.1.en.md')) {
+            $text = Get-Content -Raw `
+                -LiteralPath (Join-Path $repoRoot $relativePath) `
+                -Encoding UTF8
+            foreach ($assetName in $expectedAssets) {
+                if (-not $text.Contains($assetName)) {
+                    throw "$relativePath does not document public asset: $assetName"
+                }
+            }
+        }
+
+        foreach ($relativePath in @(
+                'docs/RELEASE_NOTES_0.1.1.md',
+                'docs/RELEASE_NOTES_0.1.1.en.md')) {
+            $text = Get-Content -Raw `
+                -LiteralPath (Join-Path $repoRoot $relativePath) `
+                -Encoding UTF8
+            $text.Contains($installerSourceFileName) | Should Be $false
+            $text.Contains($manualSourceFileName) | Should Be $false
+        }
+
+        $installerSourcePublicListPattern = '(?m)^\s*\d+\.\s+`' +
+            [regex]::Escape($installerSourceFileName) + '`\s*$'
+        $manualSourcePublicListPattern = '(?m)^\s*\d+\.\s+`' +
+            [regex]::Escape($manualSourceFileName) + '`\s*$'
+
+        foreach ($relativePath in @('docs/BUILD.md', 'docs/BUILD.en.md')) {
+            $text = Get-Content -Raw `
+                -LiteralPath (Join-Path $repoRoot $relativePath) `
+                -Encoding UTF8
+            $text.Contains("artifacts\installer\$installerSourceFileName") |
+                Should Be $true
+            $text.Contains("artifacts\manual\$manualSourceFileName") |
+                Should Be $true
+            $text | Should Not Match $installerSourcePublicListPattern
+            $text | Should Not Match $manualSourcePublicListPattern
         }
     }
 
@@ -175,8 +266,8 @@ Describe 'Lemon release bundle contract' {
         foreach ($assignment in $assignments) {
             $members = @(Get-ReleaseArrayMemberNames -Assignment $assignment)
             ($members -join "`n") | Should Be (@(
-                    'installerFileName',
-                    'manualFileName',
+                    'installerPublicFileName',
+                    'manualPublicFileName',
                     'releaseNotesFileName',
                     'buildInfoFileName',
                     'licenseFileName') -join "`n")

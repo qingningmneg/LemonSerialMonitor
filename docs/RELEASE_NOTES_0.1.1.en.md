@@ -16,8 +16,8 @@ Version 0.1.1 is a maintenance and release-integrity update relative to 0.1.0. I
 
 Each 0.1.1 public release directory contains exactly these six ordinary files:
 
-1. `Lemon串口监控-安装程序-x64.exe`
-2. `Lemon串口监控-完整操作手册.pdf`
+1. `LemonSerialMonitor-Setup-x64.exe`
+2. `LemonSerialMonitor-User-Manual-zh-CN.pdf`
 3. `RELEASE-NOTES.md`
 4. `BUILD-INFO.json`
 5. `LICENSE.txt`
