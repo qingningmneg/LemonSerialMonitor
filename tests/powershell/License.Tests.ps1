@@ -1,8 +1,9 @@
-Set-StrictMode -Version Latest
+﻿Set-StrictMode -Version Latest
 
 $repoRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 $licensePath = Join-Path $repoRoot 'LICENSE'
 $buildAllPath = Join-Path $repoRoot 'scripts\Build-All.ps1'
+$buildInstallerPath = Join-Path $repoRoot 'scripts\Build-Installer.ps1'
 $chineseReadmePath = Join-Path $repoRoot 'README.md'
 $englishReadmePath = Join-Path $repoRoot 'README.en.md'
 $installerDisclosurePath = Join-Path $repoRoot `
@@ -329,6 +330,69 @@ function Test-LicenseTransfer {
     return $false
 }
 
+function Test-RequiredPackageOutputReference {
+    param(
+        [Parameter(Mandatory)]
+        [Management.Automation.Language.ScriptBlockAst] $Ast,
+        [Parameter(Mandatory)][string] $TargetVariable
+    )
+
+    $requiredOutputAssignments = @($Ast.FindAll({
+                param($node)
+                $node -is [Management.Automation.Language.AssignmentStatementAst] -and
+                $node.Left -is [Management.Automation.Language.VariableExpressionAst] -and
+                $node.Left.VariablePath.UserPath -eq 'requiredPackageOutputs' -and
+                $node.Operator -in @(
+                    [Management.Automation.Language.TokenKind]::Equals,
+                    [Management.Automation.Language.TokenKind]::PlusEquals)
+            }, $true))
+
+    return @($requiredOutputAssignments | Where-Object {
+            Test-AstReferencesVariable `
+                -Ast $_.Right `
+                -VariableName $TargetVariable
+        }).Count -gt 0
+}
+
+function Test-VariableAssignmentContainsExactString {
+    param(
+        [Parameter(Mandatory)]
+        [Management.Automation.Language.ScriptBlockAst] $Ast,
+        [Parameter(Mandatory)][string] $VariableName,
+        [Parameter(Mandatory)][string] $ExpectedValue
+    )
+
+    $assignments = @($Ast.FindAll({
+                param($node)
+                $node -is [Management.Automation.Language.AssignmentStatementAst] -and
+                $node.Left -is [Management.Automation.Language.VariableExpressionAst] -and
+                [string]::Equals(
+                    $node.Left.VariablePath.UserPath,
+                    $VariableName,
+                    [StringComparison]::OrdinalIgnoreCase) -and
+                $node.Operator -in @(
+                    [Management.Automation.Language.TokenKind]::Equals,
+                    [Management.Automation.Language.TokenKind]::PlusEquals)
+            }, $true))
+    foreach ($assignment in $assignments) {
+        $stringValues = @($assignment.Right.FindAll({
+                    param($node)
+                    $node -is
+                        [Management.Automation.Language.StringConstantExpressionAst]
+                }, $true) | ForEach-Object Value)
+        if (@($stringValues | Where-Object {
+                    [string]::Equals(
+                        $_,
+                        $ExpectedValue,
+                        [StringComparison]::Ordinal)
+                }).Count -gt 0) {
+            return $true
+        }
+    }
+
+    return $false
+}
+
 Describe 'MIT license distribution contract' {
     It 'provides the standard MIT license and attribution at repository root' {
         $license = Get-RequiredUtf8Content -Path $licensePath
@@ -431,6 +495,138 @@ Describe 'MIT license distribution contract' {
                     -VariableName $targetVariable
             }).Count -gt 0
         $targetIsRequired | Should Be $true
+    }
+
+    It 'copies the third-party source record into the package documentation tree' {
+        $buildAll = Get-RequiredUtf8Content -Path $buildAllPath
+        if ($null -eq $buildAll) {
+            return
+        }
+
+        $ast = Get-PowerShellAst -Content $buildAll
+        $sourceVariable = Get-JoinedPathVariableName `
+            -Ast $ast `
+            -ParentVariable 'repoRoot' `
+            -ChildPath 'installer\third-party\SOURCE.md'
+        $targetVariable = Get-JoinedPathVariableName `
+            -Ast $ast `
+            -ParentVariable 'docsOutput' `
+            -ChildPath 'third-party\SOURCE.md'
+        if ([string]::IsNullOrEmpty($sourceVariable) -or
+            [string]::IsNullOrEmpty($targetVariable)) {
+            return
+        }
+
+        (Test-LicenseTransfer `
+                -Ast $ast `
+                -SourceVariable $sourceVariable `
+                -TargetVariable $targetVariable) | Should Be $true
+    }
+
+    It 'copies the third-party translation license into the package documentation tree' {
+        $buildAll = Get-RequiredUtf8Content -Path $buildAllPath
+        if ($null -eq $buildAll) {
+            return
+        }
+
+        $ast = Get-PowerShellAst -Content $buildAll
+        $sourceVariable = Get-JoinedPathVariableName `
+            -Ast $ast `
+            -ParentVariable 'repoRoot' `
+            -ChildPath 'installer\third-party\Inno-Setup-Chinese-Simplified-Translation.LICENSE.txt'
+        $targetVariable = Get-JoinedPathVariableName `
+            -Ast $ast `
+            -ParentVariable 'docsOutput' `
+            -ChildPath 'third-party\Inno-Setup-Chinese-Simplified-Translation.LICENSE.txt'
+        if ([string]::IsNullOrEmpty($sourceVariable) -or
+            [string]::IsNullOrEmpty($targetVariable)) {
+            return
+        }
+
+        (Test-LicenseTransfer `
+                -Ast $ast `
+                -SourceVariable $sourceVariable `
+                -TargetVariable $targetVariable) | Should Be $true
+    }
+
+    It 'requires the packaged third-party source record output' {
+        $buildAll = Get-RequiredUtf8Content -Path $buildAllPath
+        if ($null -eq $buildAll) {
+            return
+        }
+
+        $ast = Get-PowerShellAst -Content $buildAll
+        $targetVariable = Get-JoinedPathVariableName `
+            -Ast $ast `
+            -ParentVariable 'docsOutput' `
+            -ChildPath 'third-party\SOURCE.md'
+        if ([string]::IsNullOrEmpty($targetVariable)) {
+            return
+        }
+
+        (Test-RequiredPackageOutputReference `
+                -Ast $ast `
+                -TargetVariable $targetVariable) | Should Be $true
+    }
+
+    It 'requires the packaged third-party translation license output' {
+        $buildAll = Get-RequiredUtf8Content -Path $buildAllPath
+        if ($null -eq $buildAll) {
+            return
+        }
+
+        $ast = Get-PowerShellAst -Content $buildAll
+        $targetVariable = Get-JoinedPathVariableName `
+            -Ast $ast `
+            -ParentVariable 'docsOutput' `
+            -ChildPath 'third-party\Inno-Setup-Chinese-Simplified-Translation.LICENSE.txt'
+        if ([string]::IsNullOrEmpty($targetVariable)) {
+            return
+        }
+
+        (Test-RequiredPackageOutputReference `
+                -Ast $ast `
+                -TargetVariable $targetVariable) | Should Be $true
+    }
+
+    It 'requires the project license in the installer payload' {
+        $buildInstaller = Get-RequiredUtf8Content -Path $buildInstallerPath
+        if ($null -eq $buildInstaller) {
+            return
+        }
+
+        $ast = Get-PowerShellAst -Content $buildInstaller
+        (Test-VariableAssignmentContainsExactString `
+                -Ast $ast `
+                -VariableName 'requiredPayload' `
+                -ExpectedValue 'docs\LICENSE.txt') | Should Be $true
+    }
+
+    It 'requires the third-party source record in the installer payload' {
+        $buildInstaller = Get-RequiredUtf8Content -Path $buildInstallerPath
+        if ($null -eq $buildInstaller) {
+            return
+        }
+
+        $ast = Get-PowerShellAst -Content $buildInstaller
+        (Test-VariableAssignmentContainsExactString `
+                -Ast $ast `
+                -VariableName 'requiredPayload' `
+                -ExpectedValue 'docs\third-party\SOURCE.md') | Should Be $true
+    }
+
+    It 'requires the third-party translation license in the installer payload' {
+        $buildInstaller = Get-RequiredUtf8Content -Path $buildInstallerPath
+        if ($null -eq $buildInstaller) {
+            return
+        }
+
+        $ast = Get-PowerShellAst -Content $buildInstaller
+        (Test-VariableAssignmentContainsExactString `
+                -Ast $ast `
+                -VariableName 'requiredPayload' `
+                -ExpectedValue 'docs\third-party\Inno-Setup-Chinese-Simplified-Translation.LICENSE.txt') |
+            Should Be $true
     }
 
     It 'states the MIT commercial-use terms in the Chinese README' {

@@ -27,6 +27,16 @@ $scriptsOutput = Join-Path $phaseRoot 'scripts'
 $docsOutput = Join-Path $phaseRoot 'docs'
 $examplesOutput = Join-Path $phaseRoot 'examples\ai'
 $manualOutput = Join-Path $phaseRoot 'manual'
+$licenseSource = [IO.Path]::GetFullPath((Join-Path $repoRoot 'LICENSE'))
+$licenseOutput = Join-Path $docsOutput 'LICENSE.txt'
+$thirdPartySourceRecord = [IO.Path]::GetFullPath((Join-Path $repoRoot `
+    'installer\third-party\SOURCE.md'))
+$thirdPartyLicenseSource = [IO.Path]::GetFullPath((Join-Path $repoRoot `
+    'installer\third-party\Inno-Setup-Chinese-Simplified-Translation.LICENSE.txt'))
+$thirdPartyDocsOutput = Join-Path $docsOutput 'third-party'
+$thirdPartySourceRecordOutput = Join-Path $docsOutput 'third-party\SOURCE.md'
+$thirdPartyLicenseOutput = Join-Path $docsOutput `
+    'third-party\Inno-Setup-Chinese-Simplified-Translation.LICENSE.txt'
 
 function Invoke-CheckedCommand {
     param(
@@ -293,6 +303,27 @@ function Assert-LemonPublishedMetadata {
     }
 }
 
+if (-not (Test-Path -LiteralPath $licenseSource -PathType Leaf)) {
+    throw "Required project license was not found: $licenseSource"
+}
+$licenseContent = Get-Content -Raw -LiteralPath $licenseSource -Encoding UTF8
+foreach ($requiredLicenseText in @(
+        'MIT License',
+        'Copyright (c) 2026 qingningmneg',
+        'to use, copy, modify, merge, publish, distribute, sublicense, and/or sell',
+        'The above copyright notice and this permission notice shall be included')) {
+    if (-not $licenseContent.Contains($requiredLicenseText)) {
+        throw "Required project license text is missing: $requiredLicenseText"
+    }
+}
+foreach ($thirdPartySource in @(
+        $thirdPartySourceRecord,
+        $thirdPartyLicenseSource)) {
+    if (-not (Test-Path -LiteralPath $thirdPartySource -PathType Leaf)) {
+        throw "Required third-party notice was not found: $thirdPartySource"
+    }
+}
+
 if (-not $phaseRoot.StartsWith(
         $artifactsRoot.TrimEnd('\') + '\',
         [StringComparison]::OrdinalIgnoreCase)) {
@@ -475,6 +506,14 @@ if ($TestSignDriver) {
 
 Copy-Item -Path (Join-Path $PSScriptRoot '*.ps1') -Destination $scriptsOutput -Force
 Copy-Item -Path (Join-Path $PSScriptRoot '*.psm1') -Destination $scriptsOutput -Force
+Copy-Item -LiteralPath $licenseSource -Destination $licenseOutput -Force
+[void] [IO.Directory]::CreateDirectory($thirdPartyDocsOutput)
+Copy-Item -LiteralPath $thirdPartySourceRecord `
+    -Destination $thirdPartySourceRecordOutput `
+    -Force
+Copy-Item -LiteralPath $thirdPartyLicenseSource `
+    -Destination $thirdPartyLicenseOutput `
+    -Force
 foreach ($documentName in @(
         'INSTALL.md',
         'USER_GUIDE.md',
@@ -531,6 +570,9 @@ $requiredPackageOutputs = @(
     (Join-Path $helperOutput 'Lemon.UninstallHelper.exe'),
     (Join-Path $driverOutput 'CommMonitor.Driver.sys'),
     (Join-Path $driverOutput 'CommMonitor.Driver.inf'),
+    $licenseOutput,
+    $thirdPartySourceRecordOutput,
+    $thirdPartyLicenseOutput,
     (Join-Path $docsOutput 'AI_INTEGRATION.md'),
     (Join-Path $docsOutput 'AI_API_REFERENCE.md'),
     (Join-Path $docsOutput 'BUILD.md'),
