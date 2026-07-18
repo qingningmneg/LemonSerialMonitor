@@ -18,6 +18,62 @@ $installerWord = ConvertFrom-TestCodePoints `
 $manualWords = ConvertFrom-TestCodePoints `
     @(0x5b8c, 0x6574, 0x64cd, 0x4f5c, 0x624b, 0x518c)
 
+function Get-ReleaseScriptAst {
+    $tokens = $null
+    $errors = $null
+    $ast = [Management.Automation.Language.Parser]::ParseFile(
+        $releaseScriptPath,
+        [ref]$tokens,
+        [ref]$errors)
+    @($errors).Count | Should Be 0
+    return $ast
+}
+
+function Get-ReleaseArrayAssignments {
+    param(
+        [Parameter(Mandatory)]
+        [Management.Automation.Language.ScriptBlockAst] $Ast,
+        [Parameter(Mandatory)][string] $VariableName
+    )
+
+    return @($Ast.FindAll({
+                param($node)
+                $node -is
+                    [Management.Automation.Language.AssignmentStatementAst] -and
+                $node.Operator -eq
+                    [Management.Automation.Language.TokenKind]::Equals -and
+                $node.Left -is
+                    [Management.Automation.Language.VariableExpressionAst] -and
+                [string]::Equals(
+                    $node.Left.VariablePath.UserPath,
+                    $VariableName,
+                    [StringComparison]::OrdinalIgnoreCase)
+            }, $true))
+}
+
+function Get-ReleaseArrayMemberNames {
+    param(
+        [Parameter(Mandatory)]
+        [Management.Automation.Language.AssignmentStatementAst] $Assignment
+    )
+
+    return @([regex]::Matches(
+            $Assignment.Right.Extent.Text,
+            '\$(?<name>[A-Za-z][A-Za-z0-9]*FileName)\b') |
+        ForEach-Object { $_.Groups['name'].Value })
+}
+
+function Test-AstContainsAssignment {
+    param(
+        [Parameter(Mandatory)][Management.Automation.Language.Ast] $Container,
+        [Parameter(Mandatory)]
+        [Management.Automation.Language.AssignmentStatementAst] $Assignment
+    )
+
+    return $Assignment.Extent.StartOffset -ge $Container.Extent.StartOffset -and
+        $Assignment.Extent.EndOffset -le $Container.Extent.EndOffset
+}
+
 Describe 'Lemon release bundle contract' {
     It 'has a parseable strict release verifier' {
         Test-Path -LiteralPath $releaseScriptPath -PathType Leaf |
@@ -35,7 +91,7 @@ Describe 'Lemon release bundle contract' {
         @($errors).Count | Should Be 0
     }
 
-    It 'allows only the exact five public release assets' {
+    It 'allows only the exact six public release assets' {
         if (-not (Test-Path -LiteralPath $releaseScriptPath -PathType Leaf)) {
             return
         }
@@ -45,6 +101,7 @@ Describe 'Lemon release bundle contract' {
                 ($productName + '-' + $manualWords + '.pdf'),
                 'RELEASE-NOTES.md',
                 'BUILD-INFO.json',
+                'LICENSE.txt',
                 'SHA256SUMS.txt',
                 'Get-AuthenticodeSignature',
                 'Get-FileHash',
@@ -59,6 +116,105 @@ Describe 'Lemon release bundle contract' {
         foreach ($forbidden in @('*.pfx', '*.p12', '*.key')) {
             $text.Contains($forbidden) | Should Be $false
         }
+
+        $ast = Get-ReleaseScriptAst
+        $assignments = @(Get-ReleaseArrayAssignments `
+                -Ast $ast `
+                -VariableName 'expectedAssetNames')
+        $assignments.Count | Should Be 1
+        if ($assignments.Count -eq 1) {
+            $members = @(Get-ReleaseArrayMemberNames `
+                    -Assignment $assignments[0])
+            ($members -join "`n") | Should Be (@(
+                    'installerFileName',
+                    'manualFileName',
+                    'releaseNotesFileName',
+                    'buildInfoFileName',
+                    'licenseFileName',
+                    'manifestFileName') -join "`n")
+        }
+    }
+
+    It 'uses the ordinary root LICENSE as the byte-for-byte create input' {
+        $text = Get-Content -Raw -LiteralPath $releaseScriptPath -Encoding UTF8
+        foreach ($required in @(
+                '[string] $LicensePath',
+                '$LicensePath = Join-Path $repoRoot ''LICENSE''',
+                '$licenseSource = Assert-LemonOrdinaryFile',
+                '-LiteralPath ([IO.Path]::GetFullPath($LicensePath))',
+                "-Role 'Project MIT license source'",
+                'Copy-Item -LiteralPath $licenseSource.FullName',
+                '-Destination (Join-Path $stagingRoot $licenseFileName)')) {
+            $text.Contains($required) | Should Be $true
+        }
+    }
+
+    It 'validates source and staged release licenses as UTF-8 MIT text' {
+        $text = Get-Content -Raw -LiteralPath $releaseScriptPath -Encoding UTF8
+        foreach ($required in @(
+                'function Assert-LemonMitLicense',
+                '[IO.File]::ReadAllText',
+                '[Text.Encoding]::UTF8',
+                'MIT License',
+                'Copyright (c) 2026 qingningmneg',
+                'The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.',
+                'Assert-LemonMitLicense -LiteralPath $licenseSource.FullName',
+                '$releaseLicense = Assert-LemonOrdinaryFile',
+                '-LiteralPath (Join-Path $RootPath $licenseFileName)',
+                'Assert-LemonMitLicense -LiteralPath $releaseLicense.FullName')) {
+            $text.Contains($required) | Should Be $true
+        }
+    }
+
+    It 'hashes exactly five assets including LICENSE in verify and create paths' {
+        $ast = Get-ReleaseScriptAst
+        $assignments = @(Get-ReleaseArrayAssignments `
+                -Ast $ast `
+                -VariableName 'hashedAssetNames')
+        $assignments.Count | Should Be 2
+        foreach ($assignment in $assignments) {
+            $members = @(Get-ReleaseArrayMemberNames -Assignment $assignment)
+            ($members -join "`n") | Should Be (@(
+                    'installerFileName',
+                    'manualFileName',
+                    'releaseNotesFileName',
+                    'buildInfoFileName',
+                    'licenseFileName') -join "`n")
+        }
+
+        $verifier = @($ast.FindAll({
+                    param($node)
+                    $node -is
+                        [Management.Automation.Language.FunctionDefinitionAst] -and
+                    $node.Name -eq 'Test-LemonReleaseBundle'
+                }, $true))
+        $createPath = @($ast.FindAll({
+                    param($node)
+                    $node -is [Management.Automation.Language.IfStatementAst] -and
+                    $node.Clauses.Count -gt 0 -and
+                    $node.Clauses[0].Item1.Extent.Text -eq '$Create'
+                }, $true))
+        $verifier.Count | Should Be 1
+        $createPath.Count | Should Be 1
+        if ($assignments.Count -eq 2 -and
+            $verifier.Count -eq 1 -and
+            $createPath.Count -eq 1) {
+            @($assignments | Where-Object {
+                    Test-AstContainsAssignment `
+                        -Container $verifier[0] `
+                        -Assignment $_
+                }).Count | Should Be 1
+            @($assignments | Where-Object {
+                    Test-AstContainsAssignment `
+                        -Container $createPath[0] `
+                        -Assignment $_
+                }).Count | Should Be 1
+        }
+
+        $text = Get-Content -Raw -LiteralPath $releaseScriptPath -Encoding UTF8
+        $text.Contains(
+            'SHA256SUMS.txt does not list exactly the five hashed assets.') |
+            Should Be $true
     }
 
     It 'creates the bundle only after the installer is signed' {

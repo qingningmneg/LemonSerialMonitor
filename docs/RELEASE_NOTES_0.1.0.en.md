@@ -2,7 +2,7 @@
 
 [简体中文](RELEASE_NOTES_0.1.0.md) | [English](RELEASE_NOTES_0.1.0.en.md)
 
-This is the first installable release, intended for personal testing and hardware/software integration.
+This is the first installable free and open-source release, intended for personal testing and hardware/software integration.
 
 ## What This Release Provides
 
@@ -16,6 +16,12 @@ This is the first installable release, intended for personal testing and hardwar
 - Local JSON CLI and standard MCP stdio interface
 - Graphical installation, migration from old manual installations, rollback on failure, and full uninstall
 - Platform-specific handling for Windows 10/11 and Windows Server 2019/2022/2025
+
+## Open-source License
+
+The project is open source under the [MIT License](../LICENSE). Individuals and companies may use it free of charge, including for commercial and for-profit purposes, and may modify, merge, publish, redistribute, sublicense, and sell copies. Any copy or substantial portion of the software must retain the `Copyright (c) 2026 qingningmneg` copyright notice and the MIT license notice.
+
+The public Release also includes `LICENSE.txt` separately, so the full license can be read without running the installer; `SHA256SUMS.txt` verifies that file as well.
 
 ## Special Installation Notes
 

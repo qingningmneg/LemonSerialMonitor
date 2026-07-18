@@ -11,6 +11,8 @@ param(
 
     [string] $ReleaseNotesPath,
 
+    [string] $LicensePath,
+
     [string] $InnoCompilerPath,
 
     [string] $ExpectedSignerThumbprint,
@@ -41,12 +43,14 @@ $installerFileName = $productName + '-' + $installerWord + '-x64.exe'
 $manualFileName = $productName + '-' + $manualWords + '.pdf'
 $releaseNotesFileName = 'RELEASE-NOTES.md'
 $buildInfoFileName = 'BUILD-INFO.json'
+$licenseFileName = 'LICENSE.txt'
 $manifestFileName = 'SHA256SUMS.txt'
 $expectedAssetNames = [string[]]@(
     $installerFileName,
     $manualFileName,
     $releaseNotesFileName,
     $buildInfoFileName,
+    $licenseFileName,
     $manifestFileName)
 $bundleRoot = [IO.Path]::GetFullPath((Join-Path $OutputRoot $Version))
 
@@ -86,6 +90,24 @@ function Assert-LemonOrdinaryFile {
         throw "$Role must not be a reparse point: $LiteralPath"
     }
     return $item
+}
+
+function Assert-LemonMitLicense {
+    param(
+        [Parameter(Mandatory)][string] $LiteralPath,
+        [Parameter(Mandatory)][string] $Role
+    )
+
+    $text = [IO.File]::ReadAllText($LiteralPath, [Text.Encoding]::UTF8)
+    $normalizedText = [regex]::Replace($text, '\s+', ' ').Trim()
+    foreach ($requiredText in @(
+            'MIT License',
+            'Copyright (c) 2026 qingningmneg',
+            'The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.')) {
+        if (-not $normalizedText.Contains($requiredText)) {
+            throw "$Role does not contain the required MIT notice: $requiredText"
+        }
+    }
 }
 
 function Assert-LemonReleaseChildPath {
@@ -181,6 +203,11 @@ function Test-LemonReleaseBundle {
     $releaseNotes = Assert-LemonOrdinaryFile `
         -LiteralPath (Join-Path $RootPath $releaseNotesFileName) `
         -Role 'Release notes'
+    $releaseLicense = Assert-LemonOrdinaryFile `
+        -LiteralPath (Join-Path $RootPath $licenseFileName) `
+        -Role 'Release MIT license'
+    Assert-LemonMitLicense -LiteralPath $releaseLicense.FullName `
+        -Role 'Release MIT license'
     $buildInfoPath = Join-Path $RootPath $buildInfoFileName
     $manifestPath = Join-Path $RootPath $manifestFileName
     [void](Assert-LemonOrdinaryFile -LiteralPath $buildInfoPath -Role 'Build information')
@@ -271,10 +298,11 @@ function Test-LemonReleaseBundle {
         $installerFileName,
         $manualFileName,
         $releaseNotesFileName,
-        $buildInfoFileName)
+        $buildInfoFileName,
+        $licenseFileName)
     if (($manifestEntries.Keys -join "`n") -cne
         (($hashedAssetNames | Sort-Object) -join "`n")) {
-        throw 'SHA256SUMS.txt does not list exactly the four hashed assets.'
+        throw 'SHA256SUMS.txt does not list exactly the five hashed assets.'
     }
     foreach ($assetName in $hashedAssetNames) {
         $actualHash = (Get-FileHash `
@@ -319,6 +347,9 @@ if ($Create) {
         $ReleaseNotesPath = Join-Path $repoRoot `
             'docs\RELEASE_NOTES_0.1.0.md'
     }
+    if ([string]::IsNullOrWhiteSpace($LicensePath)) {
+        $LicensePath = Join-Path $repoRoot 'LICENSE'
+    }
     if ([string]::IsNullOrWhiteSpace($InnoCompilerPath)) {
         throw 'InnoCompilerPath is required when creating a release bundle.'
     }
@@ -335,6 +366,11 @@ if ($Create) {
     $notesSource = Assert-LemonOrdinaryFile `
         -LiteralPath ([IO.Path]::GetFullPath($ReleaseNotesPath)) `
         -Role 'Release notes source'
+    $licenseSource = Assert-LemonOrdinaryFile `
+        -LiteralPath ([IO.Path]::GetFullPath($LicensePath)) `
+        -Role 'Project MIT license source'
+    Assert-LemonMitLicense -LiteralPath $licenseSource.FullName `
+        -Role 'Project MIT license source'
     $compiler = Assert-LemonOrdinaryFile `
         -LiteralPath ([IO.Path]::GetFullPath($InnoCompilerPath)) `
         -Role 'Inno Setup compiler'
@@ -372,6 +408,8 @@ if ($Create) {
             -Destination (Join-Path $stagingRoot $manualFileName)
         Copy-Item -LiteralPath $notesSource.FullName `
             -Destination (Join-Path $stagingRoot $releaseNotesFileName)
+        Copy-Item -LiteralPath $licenseSource.FullName `
+            -Destination (Join-Path $stagingRoot $licenseFileName)
 
         $gitRevision = Get-LemonGitValue -Arguments @('rev-parse', 'HEAD')
         $gitStatus = Get-LemonGitValue -Arguments @('status', '--porcelain')
@@ -405,7 +443,8 @@ if ($Create) {
             $installerFileName,
             $manualFileName,
             $releaseNotesFileName,
-            $buildInfoFileName)
+            $buildInfoFileName,
+            $licenseFileName)
         $manifestLines = @($hashedAssetNames | Sort-Object | ForEach-Object {
                 $hash = (Get-FileHash `
                         -LiteralPath (Join-Path $stagingRoot $_) `
