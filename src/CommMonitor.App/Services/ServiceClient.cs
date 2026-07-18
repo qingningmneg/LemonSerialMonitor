@@ -149,11 +149,16 @@ public sealed class ServiceClient : IServiceClient
         }
 
         await _lifetimeCancellation.CancelAsync();
-        _commandPipe?.Dispose();
-        _subscriptionPipe?.Dispose();
 
         await _commandGate.WaitAsync();
-        _commandGate.Release();
+        try
+        {
+            ResetCommandConnection();
+        }
+        finally
+        {
+            _commandGate.Release();
+        }
         await _subscriptionGate.WaitAsync();
         try
         {
