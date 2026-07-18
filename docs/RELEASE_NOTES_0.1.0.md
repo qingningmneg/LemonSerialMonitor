@@ -2,7 +2,7 @@
 
 [简体中文](RELEASE_NOTES_0.1.0.md) | [English](RELEASE_NOTES_0.1.0.en.md)
 
-这是第一个可安装、免费并开源的版本，面向个人测试和硬件/软件联调。
+这是第一个可安装版本，面向个人测试和硬件/软件联调。
 
 ## 本版提供
 
@@ -21,7 +21,7 @@
 
 项目按 [MIT 许可证](../LICENSE) 开源。个人和企业都可以免费使用，也允许商业使用和盈利、修改、合并、发布、再分发、再授权和销售副本。复制或再分发本软件或其实质部分时，必须保留 `Copyright (c) 2026 qingningmneg` 版权声明和 MIT 许可证声明。
 
-公开 Release 还会单独附带 `LICENSE.txt`，无需运行安装程序即可查看完整许可证；`SHA256SUMS.txt` 同时校验该文件。
+历史 v0.1.0 Release 保持原有五个资产，不含 LICENSE.txt；从 v0.1.1 起，公开 Release 将 LICENSE.txt 作为第六个资产，并由该版本的 SHA256SUMS.txt 校验。
 
 ## 安装特别说明
 

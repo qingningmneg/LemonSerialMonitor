@@ -531,4 +531,38 @@ Describe 'Version 0.1.1 bilingual release documentation contract' {
                 '[English](RELEASE_NOTES_0.1.0.en.md)',
             [StringComparison]::Ordinal) | Should Be $true
     }
+
+    It 'keeps the historical 0.1.0 public asset set accurate in <RelativePath>' `
+            -TestCases @(
+        @{
+            RelativePath = 'docs/RELEASE_NOTES_0.1.0.md'
+            Intro = '这是第一个可安装版本，面向个人测试和硬件/软件联调。'
+            AssetStatement =
+                '历史 v0.1.0 Release 保持原有五个资产，不含 LICENSE.txt；' +
+                '从 v0.1.1 起，公开 Release 将 LICENSE.txt 作为第六个资产，' +
+                '并由该版本的 SHA256SUMS.txt 校验。'
+        },
+        @{
+            RelativePath = 'docs/RELEASE_NOTES_0.1.0.en.md'
+            Intro =
+                'This is the first installable release, intended for personal testing ' +
+                'and hardware/software integration.'
+            AssetStatement =
+                'The historical v0.1.0 Release remains unchanged with five assets and ' +
+                'does not include LICENSE.txt. Beginning with v0.1.1, public Releases ' +
+                'include LICENSE.txt as a sixth asset, verified by that version''s ' +
+                'SHA256SUMS.txt.'
+        }
+    ) {
+        param(
+            [string] $RelativePath,
+            [string] $Intro,
+            [string] $AssetStatement
+        )
+
+        $content = Get-RepositoryDocumentText -RelativePath $RelativePath
+
+        $content.Contains($Intro) | Should Be $true
+        $content.Contains($AssetStatement) | Should Be $true
+    }
 }
