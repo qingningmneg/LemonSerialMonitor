@@ -489,6 +489,16 @@ Describe 'Version 0.1.1 bilingual release documentation contract' {
         $builder | Should Match '0\.1\.1[^\r\n]*没有新增[^\r\n]*Server[^\r\n]*驱动[^\r\n]*端到端验收'
     }
 
+    It 'uses only the stable public installer asset name in the manual setup step' {
+        $builder = Get-RepositoryDocumentText `
+            -RelativePath 'scripts/docs/build_commmonitor_manual.py'
+
+        $builder | Should Match (
+            [regex]::Escape('双击“LemonSerialMonitor-Setup-x64.exe”。'))
+        $builder | Should Not Match (
+            [regex]::Escape('Lemon串口监控-安装程序-x64.exe'))
+    }
+
     It 'prevents manual table data rows from splitting across pages' {
         $builder = Get-RepositoryDocumentText `
             -RelativePath 'scripts/docs/build_commmonitor_manual.py'

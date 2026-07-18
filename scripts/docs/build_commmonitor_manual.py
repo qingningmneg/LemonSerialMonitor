@@ -623,7 +623,7 @@ def build_document() -> Document:
     add_heading(doc, "3. 图形化安装", 1)
     lists.numbered(
         [
-            "双击“Lemon串口监控-安装程序-x64.exe”。",
+            "双击“LemonSerialMonitor-Setup-x64.exe”。",
             "遇到 SmartScreen 或 UAC 时核对下载来源和 SHA-256，再按 Windows 提示继续。",
             "阅读本地测试证书说明并勾选接受。",
             "选择桌面程序安装位置，默认是 C:\\Program Files\\Lemon串口监控。",
