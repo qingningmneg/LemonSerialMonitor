@@ -162,6 +162,100 @@ Describe 'Lemon release bundle contract' {
         }
     }
 
+    It 'rewrites and verifies the exact flat-bundle MIT license link' {
+        $ast = Get-ReleaseScriptAst
+        $functions = @{}
+        foreach ($functionName in @(
+                'Convert-LemonReleaseNotesForBundle',
+                'Assert-LemonBundleReleaseNotesLicenseLink')) {
+            $matches = @($ast.FindAll({
+                        param($node)
+
+                        $node -is
+                            [Management.Automation.Language.FunctionDefinitionAst] -and
+                        $node.Name -eq $functionName
+                    }, $true))
+            $matches.Count | Should Be 1
+            if ($matches.Count -ne 1) {
+                return
+            }
+            $functions[$functionName] = $matches[0]
+            . ([scriptblock]::Create($matches[0].Extent.Text))
+        }
+
+        $utf8NoBomStrict = [Text.UTF8Encoding]::new($false, $true)
+        $sourcePath = Join-Path $TestDrive 'source-notes.md'
+        [IO.File]::WriteAllText(
+            $sourcePath,
+            "# Notes`n[MIT](../LICENSE)`n",
+            $utf8NoBomStrict)
+        $converted = Convert-LemonReleaseNotesForBundle `
+            -LiteralPath $sourcePath
+        $converted.Contains('](LICENSE.txt)') | Should Be $true
+        $converted.Contains('](../LICENSE)') | Should Be $false
+
+        $bundlePath = Join-Path $TestDrive 'RELEASE-NOTES.md'
+        [IO.File]::WriteAllText($bundlePath, $converted, $utf8NoBomStrict)
+        { Assert-LemonBundleReleaseNotesLicenseLink -LiteralPath $bundlePath } |
+            Should Not Throw
+
+        foreach ($invalidSource in @(
+                '# no license link',
+                '[one](../LICENSE) [two](../LICENSE)',
+                '[already packaged](LICENSE.txt)')) {
+            [IO.File]::WriteAllText($sourcePath, $invalidSource, $utf8NoBomStrict)
+            { Convert-LemonReleaseNotesForBundle -LiteralPath $sourcePath } |
+                Should Throw
+        }
+        foreach ($invalidBundle in @(
+                '# no license link',
+                '[repository](../LICENSE)',
+                '[one](LICENSE.txt) [two](LICENSE.txt)')) {
+            [IO.File]::WriteAllText($bundlePath, $invalidBundle, $utf8NoBomStrict)
+            { Assert-LemonBundleReleaseNotesLicenseLink `
+                    -LiteralPath $bundlePath } | Should Throw
+        }
+
+        $sourceWithBom = [byte[]](@(0xEF, 0xBB, 0xBF) + @(
+                $utf8NoBomStrict.GetBytes('[MIT](../LICENSE)')))
+        $bundleWithBom = [byte[]](@(0xEF, 0xBB, 0xBF) + @(
+                $utf8NoBomStrict.GetBytes('[MIT](LICENSE.txt)')))
+        $invalidUtf8 = [byte[]]@(0xC3, 0x28)
+        $utf16Source = [byte[]](@([Text.Encoding]::Unicode.GetPreamble()) + @(
+                [Text.Encoding]::Unicode.GetBytes('[MIT](../LICENSE)')))
+        $utf16Bundle = [byte[]](@([Text.Encoding]::Unicode.GetPreamble()) + @(
+                [Text.Encoding]::Unicode.GetBytes('[MIT](LICENSE.txt)')))
+        foreach ($invalidBytes in @(
+                $sourceWithBom,
+                $invalidUtf8,
+                $utf16Source)) {
+            [IO.File]::WriteAllBytes($sourcePath, $invalidBytes)
+            { Convert-LemonReleaseNotesForBundle -LiteralPath $sourcePath } |
+                Should Throw
+        }
+        foreach ($invalidBytes in @(
+                $bundleWithBom,
+                $invalidUtf8,
+                $utf16Bundle)) {
+            [IO.File]::WriteAllBytes($bundlePath, $invalidBytes)
+            { Assert-LemonBundleReleaseNotesLicenseLink `
+                    -LiteralPath $bundlePath } | Should Throw
+        }
+    }
+
+    It 'creates and validates release notes through the flat-bundle link contract' {
+        $text = Get-Content -Raw -LiteralPath $releaseScriptPath -Encoding UTF8
+        foreach ($required in @(
+                'Convert-LemonReleaseNotesForBundle `',
+                '-LiteralPath $notesSource.FullName',
+                'Assert-LemonBundleReleaseNotesLicenseLink `',
+                '-LiteralPath $releaseNotes.FullName')) {
+            $text.Contains($required) | Should Be $true
+        }
+        $text.Contains('Copy-Item -LiteralPath $notesSource.FullName') |
+            Should Be $false
+    }
+
     It 'binds each build source and public asset role to its exact name' {
         $ast = Get-ReleaseScriptAst
         (Get-SingleReleaseAssignmentRightText `

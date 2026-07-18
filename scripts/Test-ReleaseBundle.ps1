@@ -72,6 +72,64 @@ function Write-LemonUtf8NoBom {
         [Text.UTF8Encoding]::new($false))
 }
 
+function Convert-LemonReleaseNotesForBundle {
+    param([Parameter(Mandatory)][string] $LiteralPath)
+
+    if (-not (Test-Path -LiteralPath $LiteralPath -PathType Leaf)) {
+        throw "Release notes source was not found: $LiteralPath"
+    }
+    $bytes = [IO.File]::ReadAllBytes($LiteralPath)
+    if ($bytes.Length -ge 3 -and
+        $bytes[0] -eq 0xEF -and
+        $bytes[1] -eq 0xBB -and
+        $bytes[2] -eq 0xBF) {
+        throw 'Release notes source must be strict UTF-8 without a BOM.'
+    }
+    $strictUtf8 = [Text.UTF8Encoding]::new($false, $true)
+    $text = $strictUtf8.GetString($bytes)
+    $repositoryTarget = '](../LICENSE)'
+    $bundleTarget = '](LICENSE.txt)'
+    $repositoryCount = [Text.RegularExpressions.Regex]::Matches(
+        $text,
+        [Text.RegularExpressions.Regex]::Escape($repositoryTarget)).Count
+    $bundleCount = [Text.RegularExpressions.Regex]::Matches(
+        $text,
+        [Text.RegularExpressions.Regex]::Escape($bundleTarget)).Count
+    if ($repositoryCount -ne 1 -or $bundleCount -ne 0) {
+        throw 'Release notes source must contain exactly one repository LICENSE link and no bundle LICENSE link.'
+    }
+
+    return $text.Replace($repositoryTarget, $bundleTarget)
+}
+
+function Assert-LemonBundleReleaseNotesLicenseLink {
+    param([Parameter(Mandatory)][string] $LiteralPath)
+
+    if (-not (Test-Path -LiteralPath $LiteralPath -PathType Leaf)) {
+        throw "Release notes asset was not found: $LiteralPath"
+    }
+    $bytes = [IO.File]::ReadAllBytes($LiteralPath)
+    if ($bytes.Length -ge 3 -and
+        $bytes[0] -eq 0xEF -and
+        $bytes[1] -eq 0xBB -and
+        $bytes[2] -eq 0xBF) {
+        throw 'Release notes asset must be strict UTF-8 without a BOM.'
+    }
+    $strictUtf8 = [Text.UTF8Encoding]::new($false, $true)
+    $text = $strictUtf8.GetString($bytes)
+    $repositoryTarget = '](../LICENSE)'
+    $bundleTarget = '](LICENSE.txt)'
+    $repositoryCount = [Text.RegularExpressions.Regex]::Matches(
+        $text,
+        [Text.RegularExpressions.Regex]::Escape($repositoryTarget)).Count
+    $bundleCount = [Text.RegularExpressions.Regex]::Matches(
+        $text,
+        [Text.RegularExpressions.Regex]::Escape($bundleTarget)).Count
+    if ($repositoryCount -ne 0 -or $bundleCount -ne 1) {
+        throw 'Release notes asset must link exactly once to the flat-bundle LICENSE.txt.'
+    }
+}
+
 function Get-LemonNormalizedThumbprint {
     param([Parameter(Mandatory)][string] $Thumbprint)
 
@@ -238,6 +296,8 @@ function Test-LemonReleaseBundle {
     $releaseNotes = Assert-LemonOrdinaryFile `
         -LiteralPath (Join-Path $RootPath $releaseNotesFileName) `
         -Role 'Release notes'
+    Assert-LemonBundleReleaseNotesLicenseLink `
+        -LiteralPath $releaseNotes.FullName
     $releaseLicense = Assert-LemonOrdinaryFile `
         -LiteralPath (Join-Path $RootPath $licenseFileName) `
         -Role 'Release MIT license'
@@ -470,8 +530,11 @@ if ($Create) {
             -Destination (Join-Path $stagingRoot $installerPublicFileName)
         Copy-Item -LiteralPath $manualSource.FullName `
             -Destination (Join-Path $stagingRoot $manualPublicFileName)
-        Copy-Item -LiteralPath $notesSource.FullName `
-            -Destination (Join-Path $stagingRoot $releaseNotesFileName)
+        $releaseNotesText = Convert-LemonReleaseNotesForBundle `
+            -LiteralPath $notesSource.FullName
+        Write-LemonUtf8NoBom `
+            -LiteralPath (Join-Path $stagingRoot $releaseNotesFileName) `
+            -Value $releaseNotesText
         Copy-Item -LiteralPath $licenseSource.FullName `
             -Destination (Join-Path $stagingRoot $licenseFileName)
 
