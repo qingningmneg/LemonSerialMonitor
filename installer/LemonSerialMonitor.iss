@@ -64,6 +64,8 @@ Source: "{#PayloadRoot}\docs\*"; DestDir: "LemonPayload\docs"; Flags: dontcopy n
 Source: "{#PayloadRoot}\examples\*"; DestDir: "LemonPayload\examples"; Flags: dontcopy noencryption recursesubdirs createallsubdirs
 Source: "{#PayloadRoot}\manual\*"; DestDir: "LemonPayload\manual"; Flags: dontcopy noencryption recursesubdirs createallsubdirs
 Source: "{#PayloadRoot}\README.md"; DestDir: "LemonPayload"; Flags: dontcopy noencryption
+Source: "{#PayloadRoot}\README.en.md"; DestDir: "LemonPayload"; Flags: dontcopy noencryption
+Source: "{#PayloadRoot}\LICENSE"; DestDir: "LemonPayload"; Flags: dontcopy noencryption
 Source: "{#PayloadRoot}\SHA256SUMS.txt"; DestDir: "LemonPayload"; Flags: dontcopy noencryption
 
 ; These protected copies are tracked by Inno so its own final uninstall removes

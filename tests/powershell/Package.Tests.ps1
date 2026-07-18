@@ -22,7 +22,9 @@ foreach ($functionName in @(
         'Remove-VerifiedDirectoryTree',
         'Reset-LemonAppPublishOutput',
         'Assert-LemonAppPublishOutput',
-        'Assert-LemonPublishedMetadata')) {
+        'Assert-LemonPublishedMetadata',
+        'Test-PackagedMarkdownLinks',
+        'Convert-LemonPackagedRepositoryLicenseLink')) {
     if ($buildFunctionAsts.ContainsKey($functionName)) {
         . ([scriptblock]::Create(
                 $buildFunctionAsts[$functionName].Extent.Text))
@@ -136,14 +138,27 @@ Describe 'CommMonitor package completeness' {
             -Encoding UTF8
         foreach ($documentName in @(
                 'INSTALL.md',
+                'INSTALL.en.md',
                 'USER_GUIDE.md',
+                'USER_GUIDE.en.md',
                 'TROUBLESHOOTING.md',
+                'TROUBLESHOOTING.en.md',
                 'AI_INTEGRATION.md',
+                'AI_INTEGRATION.en.md',
                 'AI_API_REFERENCE.md',
+                'AI_API_REFERENCE.en.md',
                 'BUILD.md',
+                'BUILD.en.md',
                 'SECURITY.md',
-                'RELEASE_NOTES_0.1.1.md')) {
+                'SECURITY.en.md',
+                'RELEASE_NOTES_0.1.1.md',
+                'RELEASE_NOTES_0.1.1.en.md')) {
             $localBuildText.Contains("'$documentName'") | Should Be $true
+        }
+        foreach ($rootDocumentName in @(
+                'README.md',
+                'README.en.md')) {
+            $localBuildText.Contains("'$rootDocumentName'") | Should Be $true
         }
         $manualPrefix = 'Lemon' + (-join ([char[]]@(
                     0x4e32, 0x53e3, 0x76d1, 0x63a7))) + '-' +
@@ -167,6 +182,116 @@ Describe 'CommMonitor package completeness' {
                     ('manual\' + $manualPrefix + $extension)) -PathType Leaf |
                 Should Be $true
         }
+    }
+
+    It 'rewrites exactly one repository license link in a packaged release note' {
+        $buildFunctionAsts.ContainsKey(
+            'Convert-LemonPackagedRepositoryLicenseLink') | Should Be $true
+        if (-not $buildFunctionAsts.ContainsKey(
+                'Convert-LemonPackagedRepositoryLicenseLink')) {
+            return
+        }
+
+        $utf8NoBom = [Text.UTF8Encoding]::new($false, $true)
+        $releaseNote = Join-Path $TestDrive 'release-note.md'
+        [IO.File]::WriteAllText(
+            $releaseNote,
+            "# 发布说明`n[MIT](../LICENSE)`n",
+            $utf8NoBom)
+
+        Convert-LemonPackagedRepositoryLicenseLink -Path $releaseNote
+
+        $rewritten = [IO.File]::ReadAllText($releaseNote, $utf8NoBom)
+        $rewritten.Contains('](LICENSE.txt)') | Should Be $true
+        $rewritten.Contains('](../LICENSE)') | Should Be $false
+        $bytes = [IO.File]::ReadAllBytes($releaseNote)
+        ($bytes.Length -ge 3 -and
+            $bytes[0] -eq 0xEF -and
+            $bytes[1] -eq 0xBB -and
+            $bytes[2] -eq 0xBF) | Should Be $false
+
+        foreach ($invalidContent in @(
+                '# no license link',
+                '[one](../LICENSE) [two](../LICENSE)')) {
+            $invalidPath = Join-Path $TestDrive (
+                [Guid]::NewGuid().ToString('N') + '.md')
+            [IO.File]::WriteAllText($invalidPath, $invalidContent, $utf8NoBom)
+            { Convert-LemonPackagedRepositoryLicenseLink -Path $invalidPath } |
+                Should Throw
+        }
+    }
+
+    It 'applies the package-only license rewrite to both current release notes' {
+        $localBuildText = Get-Content `
+            -Raw `
+            -LiteralPath $buildScriptPath `
+            -Encoding UTF8
+        $localBuildText.Contains(
+            'Convert-LemonPackagedRepositoryLicenseLink `') |
+            Should Be $true
+        $localBuildText.Contains(
+            '-Path (Join-Path $docsOutput $releaseDocumentName)') |
+            Should Be $true
+        foreach ($releaseDocumentName in @(
+                'RELEASE_NOTES_0.1.1.md',
+                'RELEASE_NOTES_0.1.1.en.md')) {
+            $localBuildText.Contains("'$releaseDocumentName'") |
+                Should Be $true
+        }
+    }
+
+    It 'keeps the installed bilingual documentation topology self-contained' {
+        foreach ($functionName in @(
+                'Test-PackagedMarkdownLinks',
+                'Convert-LemonPackagedRepositoryLicenseLink')) {
+            $buildFunctionAsts.ContainsKey($functionName) | Should Be $true
+            if (-not $buildFunctionAsts.ContainsKey($functionName)) {
+                return
+            }
+        }
+
+        $installedRoot = Join-Path $TestDrive 'installed-layout'
+        $installedDocs = Join-Path $installedRoot 'docs'
+        $installedExamples = Join-Path $installedRoot 'examples\ai'
+        New-Item -ItemType Directory -Path $installedDocs -Force | Out-Null
+        New-Item -ItemType Directory -Path $installedExamples -Force | Out-Null
+        foreach ($documentName in @(
+                'INSTALL.md',
+                'INSTALL.en.md',
+                'USER_GUIDE.md',
+                'USER_GUIDE.en.md',
+                'TROUBLESHOOTING.md',
+                'TROUBLESHOOTING.en.md',
+                'AI_INTEGRATION.md',
+                'AI_INTEGRATION.en.md',
+                'AI_API_REFERENCE.md',
+                'AI_API_REFERENCE.en.md',
+                'BUILD.md',
+                'BUILD.en.md',
+                'SECURITY.md',
+                'SECURITY.en.md',
+                'RELEASE_NOTES_0.1.1.md',
+                'RELEASE_NOTES_0.1.1.en.md')) {
+            Copy-Item `
+                -LiteralPath (Join-Path $repoRoot "docs\$documentName") `
+                -Destination $installedDocs
+        }
+        Copy-Item `
+            -LiteralPath (Join-Path $repoRoot 'LICENSE') `
+            -Destination (Join-Path $installedDocs 'LICENSE.txt')
+        Copy-Item `
+            -Path (Join-Path $repoRoot 'examples\ai\*') `
+            -Destination $installedExamples `
+            -Recurse
+        foreach ($releaseDocumentName in @(
+                'RELEASE_NOTES_0.1.1.md',
+                'RELEASE_NOTES_0.1.1.en.md')) {
+            Convert-LemonPackagedRepositoryLicenseLink `
+                -Path (Join-Path $installedDocs $releaseDocumentName)
+        }
+
+        { Test-PackagedMarkdownLinks -PackageRoot $installedRoot } |
+            Should Not Throw
     }
 }
 

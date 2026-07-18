@@ -28,6 +28,7 @@ $docsOutput = Join-Path $phaseRoot 'docs'
 $examplesOutput = Join-Path $phaseRoot 'examples\ai'
 $manualOutput = Join-Path $phaseRoot 'manual'
 $licenseSource = [IO.Path]::GetFullPath((Join-Path $repoRoot 'LICENSE'))
+$rootLicenseOutput = Join-Path $phaseRoot 'LICENSE'
 $licenseOutput = Join-Path $docsOutput 'LICENSE.txt'
 $thirdPartySourceRecord = [IO.Path]::GetFullPath((Join-Path $repoRoot `
     'installer\third-party\SOURCE.md'))
@@ -37,6 +38,25 @@ $thirdPartyDocsOutput = Join-Path $docsOutput 'third-party'
 $thirdPartySourceRecordOutput = Join-Path $docsOutput 'third-party\SOURCE.md'
 $thirdPartyLicenseOutput = Join-Path $docsOutput `
     'third-party\Inno-Setup-Chinese-Simplified-Translation.LICENSE.txt'
+$currentReleaseDocumentName = 'RELEASE_NOTES_0.1.1.md'
+$currentReleaseEnglishDocumentName = 'RELEASE_NOTES_0.1.1.en.md'
+$publicDocumentNames = @(
+    'INSTALL.md',
+    'INSTALL.en.md',
+    'USER_GUIDE.md',
+    'USER_GUIDE.en.md',
+    'TROUBLESHOOTING.md',
+    'TROUBLESHOOTING.en.md',
+    'AI_INTEGRATION.md',
+    'AI_INTEGRATION.en.md',
+    'AI_API_REFERENCE.md',
+    'AI_API_REFERENCE.en.md',
+    'BUILD.md',
+    'BUILD.en.md',
+    'SECURITY.md',
+    'SECURITY.en.md',
+    $currentReleaseDocumentName,
+    $currentReleaseEnglishDocumentName)
 
 function Invoke-CheckedCommand {
     param(
@@ -48,6 +68,31 @@ function Invoke-CheckedCommand {
     if ($LASTEXITCODE -ne 0) {
         throw "Command failed ($LASTEXITCODE): $FilePath $($ArgumentList -join ' ')"
     }
+}
+
+function Convert-LemonPackagedRepositoryLicenseLink {
+    [CmdletBinding()]
+    param([Parameter(Mandatory)][string] $Path)
+
+    if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
+        throw "Packaged Markdown document was not found: '$Path'."
+    }
+
+    $utf8NoBomStrict = [Text.UTF8Encoding]::new($false, $true)
+    $content = [IO.File]::ReadAllText($Path, $utf8NoBomStrict)
+    $repositoryTarget = '](../LICENSE)'
+    $packagedTarget = '](LICENSE.txt)'
+    $targetCount = [Text.RegularExpressions.Regex]::Matches(
+        $content,
+        [Text.RegularExpressions.Regex]::Escape($repositoryTarget)).Count
+    if ($targetCount -ne 1) {
+        throw "Expected exactly one repository LICENSE link in '$Path'; found $targetCount."
+    }
+
+    [IO.File]::WriteAllText(
+        $Path,
+        $content.Replace($repositoryTarget, $packagedTarget),
+        $utf8NoBomStrict)
 }
 
 function Test-PackagedMarkdownLinks {
@@ -506,6 +551,7 @@ if ($TestSignDriver) {
 
 Copy-Item -Path (Join-Path $PSScriptRoot '*.ps1') -Destination $scriptsOutput -Force
 Copy-Item -Path (Join-Path $PSScriptRoot '*.psm1') -Destination $scriptsOutput -Force
+Copy-Item -LiteralPath $licenseSource -Destination $rootLicenseOutput -Force
 Copy-Item -LiteralPath $licenseSource -Destination $licenseOutput -Force
 [void] [IO.Directory]::CreateDirectory($thirdPartyDocsOutput)
 Copy-Item -LiteralPath $thirdPartySourceRecord `
@@ -514,20 +560,18 @@ Copy-Item -LiteralPath $thirdPartySourceRecord `
 Copy-Item -LiteralPath $thirdPartyLicenseSource `
     -Destination $thirdPartyLicenseOutput `
     -Force
-foreach ($documentName in @(
-        'INSTALL.md',
-        'USER_GUIDE.md',
-        'TROUBLESHOOTING.md',
-        'AI_INTEGRATION.md',
-        'AI_API_REFERENCE.md',
-        'BUILD.md',
-        'SECURITY.md',
-        'RELEASE_NOTES_0.1.1.md')) {
+foreach ($documentName in $publicDocumentNames) {
     $documentPath = Join-Path (Join-Path $repoRoot 'docs') $documentName
     if (-not (Test-Path -LiteralPath $documentPath -PathType Leaf)) {
         throw "Required public document was not found: $documentPath"
     }
     Copy-Item -LiteralPath $documentPath -Destination $docsOutput -Force
+}
+foreach ($releaseDocumentName in @(
+        $currentReleaseDocumentName,
+        $currentReleaseEnglishDocumentName)) {
+    Convert-LemonPackagedRepositoryLicenseLink `
+        -Path (Join-Path $docsOutput $releaseDocumentName)
 }
 $examplesSource = Join-Path $repoRoot 'examples\ai'
 if (-not (Test-Path -LiteralPath $examplesSource -PathType Container)) {
@@ -546,9 +590,11 @@ foreach ($manualName in @(
     }
     Copy-Item -LiteralPath $manualPath -Destination $manualOutput -Force
 }
-Copy-Item -LiteralPath (Join-Path $repoRoot 'README.md') `
-    -Destination $phaseRoot `
-    -Force
+foreach ($rootDocumentName in @('README.md', 'README.en.md')) {
+    Copy-Item -LiteralPath (Join-Path $repoRoot $rootDocumentName) `
+        -Destination $phaseRoot `
+        -Force
+}
 
 Test-PackagedMarkdownLinks -PackageRoot $phaseRoot
 
@@ -570,18 +616,20 @@ $requiredPackageOutputs = @(
     (Join-Path $helperOutput 'Lemon.UninstallHelper.exe'),
     (Join-Path $driverOutput 'CommMonitor.Driver.sys'),
     (Join-Path $driverOutput 'CommMonitor.Driver.inf'),
+    $rootLicenseOutput,
     $licenseOutput,
     $thirdPartySourceRecordOutput,
     $thirdPartyLicenseOutput,
-    (Join-Path $docsOutput 'AI_INTEGRATION.md'),
-    (Join-Path $docsOutput 'AI_API_REFERENCE.md'),
-    (Join-Path $docsOutput 'BUILD.md'),
-    (Join-Path $docsOutput 'SECURITY.md'),
+    (Join-Path $phaseRoot 'README.md'),
+    (Join-Path $phaseRoot 'README.en.md'),
     (Join-Path $examplesOutput 'mcp-config.json'),
     (Join-Path $manualOutput 'Lemon串口监控-完整操作手册.docx'),
     (Join-Path $manualOutput 'Lemon串口监控-完整操作手册.pdf'),
     $manifestPath
 )
+$requiredPackageOutputs += @($publicDocumentNames | ForEach-Object {
+        Join-Path $docsOutput $_
+    })
 if ($TestSignDriver) {
     $requiredPackageOutputs += @(
         (Join-Path $driverOutput 'CommMonitor.Driver.cat'),

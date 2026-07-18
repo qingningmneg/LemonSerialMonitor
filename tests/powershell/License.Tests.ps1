@@ -464,6 +464,52 @@ Describe 'MIT license distribution contract' {
                 -TargetVariable $targetVariable) | Should Be $true
     }
 
+    It 'copies the canonical license to the package root for Markdown links' {
+        $buildAll = Get-RequiredUtf8Content -Path $buildAllPath
+        if ($null -eq $buildAll) {
+            return
+        }
+
+        $ast = Get-PowerShellAst -Content $buildAll
+        $sourceVariable = Get-JoinedPathVariableName `
+            -Ast $ast `
+            -ParentVariable 'repoRoot' `
+            -ChildPath 'LICENSE'
+        $targetVariable = Get-JoinedPathVariableName `
+            -Ast $ast `
+            -ParentVariable 'phaseRoot' `
+            -ChildPath 'LICENSE'
+        if ([string]::IsNullOrEmpty($sourceVariable) -or
+            [string]::IsNullOrEmpty($targetVariable)) {
+            return
+        }
+
+        (Test-LicenseTransfer `
+                -Ast $ast `
+                -SourceVariable $sourceVariable `
+                -TargetVariable $targetVariable) | Should Be $true
+    }
+
+    It 'requires the package-root license output' {
+        $buildAll = Get-RequiredUtf8Content -Path $buildAllPath
+        if ($null -eq $buildAll) {
+            return
+        }
+
+        $ast = Get-PowerShellAst -Content $buildAll
+        $targetVariable = Get-JoinedPathVariableName `
+            -Ast $ast `
+            -ParentVariable 'phaseRoot' `
+            -ChildPath 'LICENSE'
+        if ([string]::IsNullOrEmpty($targetVariable)) {
+            return
+        }
+
+        (Test-RequiredPackageOutputReference `
+                -Ast $ast `
+                -TargetVariable $targetVariable) | Should Be $true
+    }
+
     It 'requires the packaged license output' {
         $buildAll = Get-RequiredUtf8Content -Path $buildAllPath
         if ($null -eq $buildAll) {
@@ -600,6 +646,19 @@ Describe 'MIT license distribution contract' {
                 -Ast $ast `
                 -VariableName 'requiredPayload' `
                 -ExpectedValue 'docs\LICENSE.txt') | Should Be $true
+    }
+
+    It 'requires the package-root project license in the installer payload' {
+        $buildInstaller = Get-RequiredUtf8Content -Path $buildInstallerPath
+        if ($null -eq $buildInstaller) {
+            return
+        }
+
+        $ast = Get-PowerShellAst -Content $buildInstaller
+        (Test-VariableAssignmentContainsExactString `
+                -Ast $ast `
+                -VariableName 'requiredPayload' `
+                -ExpectedValue 'LICENSE') | Should Be $true
     }
 
     It 'requires the third-party source record in the installer payload' {

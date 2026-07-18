@@ -121,6 +121,21 @@ Describe 'Lemon graphical installer contract' {
         $text | Should Not Match '(?i)-Command'
     }
 
+    It 'embeds every root document required by the bilingual Markdown topology' {
+        $innoText = Get-Content -Raw -LiteralPath $innoPath -Encoding UTF8
+        $buildText = Get-Content -Raw -LiteralPath $buildPath -Encoding UTF8
+
+        foreach ($documentName in @('README.md', 'README.en.md', 'LICENSE')) {
+            $escapedName = [regex]::Escape($documentName)
+            $innoText | Should Match (
+                'Source: "\{#PayloadRoot\}\\' + $escapedName +
+                '"; DestDir: "LemonPayload"; Flags: dontcopy noencryption')
+            if ($documentName -ne 'LICENSE') {
+                $buildText.Contains("'$documentName'") | Should Be $true
+            }
+        }
+    }
+
     It 'keeps pending uninstall retryable through a SYSTEM startup continuation' {
         $text = Get-Content -Raw -LiteralPath $innoPath -Encoding UTF8
         foreach ($required in @(
