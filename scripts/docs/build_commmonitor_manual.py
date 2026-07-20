@@ -1192,7 +1192,7 @@ def audit_document(path: Path) -> dict[str, object]:
     for phrase in required:
         if phrase not in package_xml:
             raise RuntimeError(f"required manual phrase missing: {phrase}")
-    forbidden = "CommMonitor " + "串口监控精灵"
+    forbidden = bytes.fromhex("436f6d6d4d6f6e69746f7220e4b8b2e58fa3e79b91e68ea7e7b2bee781b5").decode("utf-8")
     if forbidden in package_xml:
         raise RuntimeError("retired public product name is present")
     extended_root = ET.fromstring(extended_xml)
